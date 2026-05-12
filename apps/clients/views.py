@@ -11,9 +11,23 @@ class ClientListCreateView(generics.ListCreateAPIView):
     search_fields = ['first_name', 'last_name', 'brand_name', 'phone']
 
     def get_queryset(self):
-        return Client.objects.annotate(
-            orders_count_ann=Count('orders')
+        qs = Client.objects.annotate(
+            orders_count_ann=Count('orders', distinct=True)
         ).order_by('-created_at')
+
+        order_status = self.request.query_params.get('order_status')
+        if order_status:
+            qs = qs.filter(orders__status=order_status).distinct()
+
+        date_from = self.request.query_params.get('date_from')
+        if date_from:
+            qs = qs.filter(created_at__date__gte=date_from)
+
+        date_to = self.request.query_params.get('date_to')
+        if date_to:
+            qs = qs.filter(created_at__date__lte=date_to)
+
+        return qs
 
     def get_serializer_class(self):
         if self.request.method == 'GET':

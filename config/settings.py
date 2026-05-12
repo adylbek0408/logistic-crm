@@ -15,6 +15,7 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 INSTALLED_APPS = [
+    'daphne',                          # must be first — overrides runserver with ASGI
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -125,12 +126,26 @@ CORS_ALLOW_CREDENTIALS = True
 # ── Redis / Channels / Celery ──
 REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {'hosts': [REDIS_URL]},
-    }
-}
+# Use Redis channel layer if Redis is reachable, otherwise fall back to
+# InMemoryChannelLayer so WebSocket works with plain `runserver` (no Redis).
+def _make_channel_layer():
+    try:
+        import redis as _redis
+        _redis.from_url(REDIS_URL).ping()
+        return {
+            'default': {
+                'BACKEND': 'channels_redis.core.RedisChannelLayer',
+                'CONFIG': {'hosts': [REDIS_URL]},
+            }
+        }
+    except Exception:
+        return {
+            'default': {
+                'BACKEND': 'channels.layers.InMemoryChannelLayer',
+            }
+        }
+
+CHANNEL_LAYERS = _make_channel_layer()
 
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL

@@ -2,11 +2,63 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { getOrders } from '../api/endpoints'
-import { formatDate, STATUS_LABELS, STATUS_COLORS, STATUS_BORDER } from '../utils/format'
-import { Badge } from '../components/ui/Badge'
+import { formatDate } from '../utils/format'
+import { ClipboardList, Filter } from 'lucide-react'
+import { SkeletonCard } from '../components/ui/Skeleton'
+import { StatusPill } from '../components/ui/StatusPill'
+import { FilterBar } from '../components/ui/FilterBar'
+import { PageHeader } from '../components/ui/PageHeader'
+import { STATUS_META } from '../utils/status'
+
+function OrderCard({ order }) {
+  const pct = order.rows_count ? Math.round((order.done_count / order.rows_count) * 100) : 0
+  const s = STATUS_META[order.status] || STATUS_META.new
+  return (
+    <Link
+      to={`/orders/${order.id}`}
+      className="group panel p-4 md:p-5 hover:border-primary/25 transition-all duration-150"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+            {(order.client_brand || order.client_name || '?')[0].toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <div className="font-semibold text-primary group-hover:text-primary-500 transition-colors truncate text-sm md:text-base">
+              {order.client_brand || order.client_name}
+            </div>
+            {order.client_brand && (
+              <div className="text-xs text-neutral-400 truncate">{order.client_name}</div>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusPill status={order.status} />
+          <span className="font-mono text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded-lg hidden sm:inline-flex">#{order.id}</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2">
+        <div className="flex-1 bg-neutral-100 rounded-full h-1.5">
+          <div
+            className={`h-1.5 rounded-full transition-all ${s.progress}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className="text-xs text-neutral-400 tabular w-8 text-right">{pct}%</span>
+      </div>
+
+      <div className="mt-3 flex items-center justify-between">
+        <span className="text-xs text-neutral-400">{formatDate(order.created_at)}</span>
+        <span className="text-xs text-neutral-500">{order.done_count} из {order.rows_count} строк</span>
+      </div>
+    </Link>
+  )
+}
 
 export function Orders() {
   const [filters, setFilters] = useState({ status: '', date_from: '', date_to: '' })
+  const [showFilters, setShowFilters] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['orders', filters],
@@ -15,68 +67,77 @@ export function Orders() {
   })
 
   const orders = data?.results || data || []
+  const activeFilters = Object.values(filters).filter(Boolean).length
 
   return (
-    <div className="p-4 md:p-6 space-y-5">
-      <h1 className="text-2xl font-bold text-primary">Заказы</h1>
+    <div className="page-wrap">
+      <PageHeader
+        title="Заказы"
+        subtitle={`${orders.length} заказов`}
+        actions={(
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`relative inline-flex items-center justify-center gap-2 w-full md:w-auto min-h-touch px-4 rounded-xl border text-sm font-medium transition-colors ${
+              activeFilters ? 'border-primary text-primary bg-primary/5' : 'border-neutral-200 text-neutral-600 hover:border-neutral-300'
+            }`}
+          >
+            <Filter size={15} />
+            Фильтры
+            {activeFilters > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-accent text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                {activeFilters}
+              </span>
+            )}
+          </button>
+        )}
+      />
 
-      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-wrap gap-3">
-        <select
-          value={filters.status}
-          onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-          className="px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-primary"
-        >
-          <option value="">Все статусы</option>
-          <option value="new">Новый</option>
-          <option value="in_progress">В процессе</option>
-          <option value="completed">Завершён</option>
-        </select>
-        <input
-          type="date"
-          value={filters.date_from}
-          onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
-          className="px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-primary"
-        />
-        <input
-          type="date"
-          value={filters.date_to}
-          onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
-          className="px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-primary"
-        />
-      </div>
+      <FilterBar
+        open={showFilters}
+        onReset={() => setFilters({ status: '', date_from: '', date_to: '' })}
+      >
+          <div className="w-full sm:w-auto">
+            <label className="field-label">Статус</label>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+              className="crm-control w-full sm:min-w-[170px]"
+            >
+              <option value="">Все статусы</option>
+              <option value="new">Новый</option>
+              <option value="in_progress">В процессе</option>
+              <option value="completed">Завершён</option>
+            </select>
+          </div>
+          <div className="w-full sm:w-auto">
+            <label className="field-label">С</label>
+            <input type="date" value={filters.date_from}
+              onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
+              className="crm-control w-full" />
+          </div>
+          <div className="w-full sm:w-auto">
+            <label className="field-label">По</label>
+            <input type="date" value={filters.date_to}
+              onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
+              className="crm-control w-full" />
+          </div>
+      </FilterBar>
 
       {isLoading ? (
-        <div className="text-center py-12 text-gray-400">Загрузка...</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {[1,2,3,4,5,6].map(i => <SkeletonCard key={i} />)}
+        </div>
       ) : (
-        <div className="space-y-2">
-          {orders.map((order) => (
-            <Link
-              key={order.id}
-              to={`/orders/${order.id}`}
-              className={`block bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition-all border-l-2 ${STATUS_BORDER[order.status]}`}
-            >
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold text-primary">#{order.id}</span>
-                  <div>
-                    <div className="font-medium">{order.client_brand || order.client_name}</div>
-                    {order.client_brand && (
-                      <div className="text-xs text-gray-400">{order.client_name}</div>
-                    )}
-                  </div>
-                  <Badge className={STATUS_COLORS[order.status]}>
-                    {STATUS_LABELS[order.status]}
-                  </Badge>
-                </div>
-                <div className="text-sm text-gray-400 tabular">{formatDate(order.created_at)}</div>
-              </div>
-              <div className="mt-1 text-sm text-gray-500">
-                Выполнено: {order.done_count} из {order.rows_count} строк
-              </div>
-            </Link>
-          ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {orders.map((order) => <OrderCard key={order.id} order={order} />)}
           {orders.length === 0 && (
-            <div className="text-center py-12 text-gray-400">Нет заказов</div>
+            <div className="col-span-full text-center py-16">
+              <div className="w-16 h-16 bg-neutral-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <ClipboardList size={28} className="text-neutral-400" />
+              </div>
+              <div className="font-medium text-neutral-500">Нет заказов</div>
+              <div className="text-sm text-neutral-400 mt-1">Создайте заказ через страницу клиента</div>
+            </div>
           )}
         </div>
       )}

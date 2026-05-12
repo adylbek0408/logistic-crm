@@ -1,24 +1,55 @@
 import io
+import os
+import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-import os
-from django.conf import settings
 
 
-def _get_styles():
-    styles = getSampleStyleSheet()
-    normal = ParagraphStyle('Normal_custom', fontName='Helvetica', fontSize=9, leading=12)
-    bold = ParagraphStyle('Bold_custom', fontName='Helvetica-Bold', fontSize=10, leading=13)
-    title = ParagraphStyle('Title_custom', fontName='Helvetica-Bold', fontSize=14, leading=17, alignment=TA_CENTER)
-    small = ParagraphStyle('Small_custom', fontName='Helvetica', fontSize=7, leading=10, textColor=colors.grey)
-    return {'normal': normal, 'bold': bold, 'title': title, 'small': small}
+# ── Font registration (Cyrillic support) ──────────────────────────────────────
 
+def _register_fonts():
+    """Register a Cyrillic-capable TTF font. Falls back gracefully."""
+    candidates = [
+        # Windows
+        (r'C:\Windows\Fonts\arial.ttf',   r'C:\Windows\Fonts\arialbd.ttf'),
+        # Linux / server
+        ('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+         '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+        ('/usr/share/fonts/dejavu/DejaVuSans.ttf',
+         '/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf'),
+    ]
+    for regular, bold in candidates:
+        if os.path.exists(regular) and os.path.exists(bold):
+            pdfmetrics.registerFont(TTFont('CyrFont', regular))
+            pdfmetrics.registerFont(TTFont('CyrFont-Bold', bold))
+            return 'CyrFont', 'CyrFont-Bold'
+    # Last resort — Helvetica shows squares for Cyrillic but won't crash
+    return 'Helvetica', 'Helvetica-Bold'
+
+
+_FONT, _FONT_BOLD = _register_fonts()
+
+
+# ── Style helpers ─────────────────────────────────────────────────────────────
+
+def _ps(name, size=9, bold=False, color=colors.black, align=TA_LEFT, leading=None):
+    return ParagraphStyle(
+        name,
+        fontName=_FONT_BOLD if bold else _FONT,
+        fontSize=size,
+        textColor=color,
+        alignment=align,
+        leading=leading or size + 3,
+    )
+
+
+# ── Main generator ────────────────────────────────────────────────────────────
 
 def generate_invoice_pdf(order) -> bytes:
     buffer = io.BytesIO()
@@ -31,146 +62,156 @@ def generate_invoice_pdf(order) -> bytes:
         bottomMargin=20 * mm,
     )
 
-    st = _get_styles()
     elements = []
-
-    # ── Header ──
-    elements.append(Paragraph('НАКЛАДНАЯ', st['title']))
-    elements.append(Spacer(1, 4 * mm))
-
-    import datetime
-    date_str = (order.sent_at or order.created_at).strftime('%d.%m.%Y')
-    elements.append(Paragraph(f'№ {order.pk} от {date_str}', ParagraphStyle('sub', fontName='Helvetica', fontSize=9, alignment=TA_CENTER)))
-    elements.append(Spacer(1, 6 * mm))
-
-    # ── Client info ──
     client = order.client
-    header_data = [
-        [Paragraph('<b>Поставщик:</b>', st['normal']),
-         Paragraph('<b>Покупатель:</b>', st['normal'])],
-        [Paragraph('ИП Асылбек', st['normal']),
-         Paragraph(f'{client.display_name}', st['normal'])],
-        [Paragraph('', st['small']),
-         Paragraph(f'Бренд: {client.brand_name}' if client.brand_name else '', st['small'])],
-        [Paragraph('', st['small']),
-         Paragraph(f'Тел: {client.phone}' if client.phone else '', st['small'])],
+    date_str = (order.sent_at or order.created_at).strftime('%d.%m.%Y')
+
+    # ── Title ──
+    elements.append(Paragraph('НАКЛАДНАЯ', _ps('title', 16, bold=True, align=TA_CENTER)))
+    elements.append(Spacer(1, 3 * mm))
+    elements.append(Paragraph(
+        f'№ {order.pk}  от  {date_str}',
+        _ps('sub', 9, align=TA_CENTER, color=colors.HexColor('#6B7280'))
+    ))
+    elements.append(Spacer(1, 7 * mm))
+
+    # ── Header: Покупатель (СЛЕВА) | Поставщик (СПРАВА) ──
+    buyer_lines = [
+        Paragraph('Покупатель:', _ps('bh', 8, bold=True, color=colors.HexColor('#6B7280'))),
+        Paragraph(client.display_name, _ps('bn', 11, bold=True)),
     ]
-    header_table = Table(header_data, colWidths=[85 * mm, 85 * mm])
+    if client.brand_name:
+        buyer_lines.append(Paragraph(client.brand_name, _ps('bb', 9)))
+    if client.phone:
+        buyer_lines.append(Paragraph(f'Тел: {client.phone}', _ps('bp', 8, color=colors.HexColor('#6B7280'))))
+
+    supplier_lines = [
+        Paragraph('Поставщик:', _ps('sh', 8, bold=True, color=colors.HexColor('#6B7280'))),
+        Paragraph('ИП Асылбек', _ps('sn', 11, bold=True)),
+    ]
+
+    header_data = [[
+        # LEFT — покупатель (клиент)
+        [line for line in buyer_lines],
+        # RIGHT — поставщик (Асылбек)
+        [line for line in supplier_lines],
+    ]]
+
+    # Build as two-column table of nested flowables
+    from reportlab.platypus import KeepInFrame
+
+    left_col = Table([[line] for line in buyer_lines], colWidths=[85 * mm])
+    left_col.setStyle(TableStyle([
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    right_col = Table([[line] for line in supplier_lines], colWidths=[85 * mm])
+    right_col.setStyle(TableStyle([
+        ('TOPPADDING', (0, 0), (-1, -1), 1),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+    ]))
+
+    header_table = Table([[left_col, right_col]], colWidths=[90 * mm, 85 * mm])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('TOPPADDING', (0, 0), (-1, -1), 2),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ('LINEBELOW', (0, 0), (-1, 0), 0.5, colors.HexColor('#E5E7EB')),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
     ]))
     elements.append(header_table)
-    elements.append(Spacer(1, 6 * mm))
+    elements.append(Spacer(1, 7 * mm))
 
-    # ── Table ──
+    # ── Data table ──
     col_headers = ['№', 'Наименование', 'В.П.', 'Заказ', 'Отправлено', 'Ед.', 'Цена', 'Итог']
-    col_widths = [8 * mm, 60 * mm, 12 * mm, 15 * mm, 18 * mm, 10 * mm, 18 * mm, 18 * mm]
+    col_widths   = [8*mm, 58*mm, 12*mm, 16*mm, 18*mm, 12*mm, 18*mm, 18*mm]
 
-    table_data = [[Paragraph(h, ParagraphStyle('hdr', fontName='Helvetica-Bold', fontSize=8)) for h in col_headers]]
+    hdr_ps = _ps('hdr', 8, bold=True, color=colors.white, align=TA_CENTER)
+    table_data = [[Paragraph(h, hdr_ps) for h in col_headers]]
 
     rows = order.rows.all().order_by('row_number')
     grand_total = 0
 
     for row in rows:
-        if row.fulfillment_status == 'done':
-            row_color = colors.white
-            text_color = colors.black
-        elif row.fulfillment_status == 'failed':
-            row_color = colors.white
-            text_color = colors.grey
-        else:
-            row_color = colors.white
-            text_color = colors.black
+        is_done   = row.fulfillment_status == 'done'
+        is_failed = row.fulfillment_status == 'failed'
+        txt_color = colors.HexColor('#9CA3AF') if is_failed else colors.black
 
-        ps = ParagraphStyle('cell', fontName='Helvetica', fontSize=8, textColor=text_color)
+        cell = _ps(f'c{row.pk}', 8, color=txt_color)
+        cell_r = _ps(f'cr{row.pk}', 8, color=txt_color, align=TA_RIGHT)
 
-        qty_str = str(row.quantity) if row.quantity is not None else ''
-        price_str = str(row.price) if row.price is not None else ''
+        qty_str   = str(row.quantity).rstrip('0').rstrip('.') if row.quantity else ''
+        price_str = f'{float(row.price):.2f}'                 if row.price    else ''
         total_str = ''
-        if row.total is not None:
-            total_str = f'{row.total:.2f}'
-            if row.fulfillment_status == 'done':
-                grand_total += float(row.total)
+        if row.total is not None and is_done:
+            total_str = f'{float(row.total):.2f}'
+            grand_total += float(row.total)
 
-        sent_qty = qty_str if row.fulfillment_status == 'done' else ''
+        unit_map = {'kg': 'кг', 'pcs': 'шт', 'pack': 'пач', 'box': 'уп'}
+        unit_str = unit_map.get(row.unit, row.unit)
 
         table_data.append([
-            Paragraph(str(row.row_number), ps),
-            Paragraph(row.item_name or '', ps),
-            Paragraph('', ps),
-            Paragraph(qty_str, ps),
-            Paragraph(sent_qty, ps),
-            Paragraph(row.get_unit_display(), ps),
-            Paragraph(price_str, ps),
-            Paragraph(total_str if row.fulfillment_status == 'done' else '', ps),
+            Paragraph(str(row.row_number), _ps(f'n{row.pk}', 8, align=TA_CENTER)),
+            Paragraph(row.item_name or '', cell),
+            Paragraph('', cell),
+            Paragraph(qty_str,  cell_r),
+            Paragraph(qty_str if is_done else '', cell_r),
+            Paragraph(unit_str, cell),
+            Paragraph(price_str, cell_r),
+            Paragraph(total_str, cell_r),
         ])
 
     # Total row
-    total_ps = ParagraphStyle('total', fontName='Helvetica-Bold', fontSize=9)
+    tot_ps = _ps('tot', 9, bold=True, align=TA_RIGHT)
     table_data.append([
-        Paragraph('', total_ps),
-        Paragraph('ИТОГО:', total_ps),
-        Paragraph('', total_ps),
-        Paragraph('', total_ps),
-        Paragraph('', total_ps),
-        Paragraph('', total_ps),
-        Paragraph('', total_ps),
-        Paragraph(f'{grand_total:.2f}', total_ps),
+        Paragraph('', tot_ps),
+        Paragraph('ИТОГО:', _ps('totl', 9, bold=True)),
+        Paragraph('', tot_ps), Paragraph('', tot_ps), Paragraph('', tot_ps),
+        Paragraph('', tot_ps), Paragraph('', tot_ps),
+        Paragraph(f'{grand_total:.2f}', tot_ps),
     ])
 
     main_table = Table(table_data, colWidths=col_widths, repeatRows=1)
-    style = TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1E1B4B')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -2), 0.3, colors.HexColor('#E2E8F0')),
-        ('LINEBELOW', (0, -1), (-1, -1), 1, colors.HexColor('#1E1B4B')),
-        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#F8FAFC')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#F8FAFC')]),
-        ('TOPPADDING', (0, 0), (-1, -1), 3),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
-        ('LEFTPADDING', (0, 0), (-1, -1), 3),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 3),
-    ])
-    main_table.setStyle(style)
+    main_table.setStyle(TableStyle([
+        ('BACKGROUND',    (0, 0),  (-1, 0),  colors.HexColor('#1E1B4B')),
+        ('FONTNAME',      (0, 0),  (-1, 0),  _FONT_BOLD),
+        ('FONTSIZE',      (0, 0),  (-1, 0),  8),
+        ('ALIGN',         (0, 0),  (-1, 0),  'CENTER'),
+        ('VALIGN',        (0, 0),  (-1, -1), 'MIDDLE'),
+        ('GRID',          (0, 0),  (-1, -2), 0.3, colors.HexColor('#E2E8F0')),
+        ('LINEBELOW',     (0, -1), (-1, -1), 1,   colors.HexColor('#1E1B4B')),
+        ('BACKGROUND',    (0, -1), (-1, -1), colors.HexColor('#F8FAFC')),
+        ('ROWBACKGROUNDS',(0, 1),  (-1, -2), [colors.white, colors.HexColor('#FAFAFA')]),
+        ('TOPPADDING',    (0, 0),  (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0),  (-1, -1), 4),
+        ('LEFTPADDING',   (0, 0),  (-1, -1), 3),
+        ('RIGHTPADDING',  (0, 0),  (-1, -1), 3),
+        ('FONTNAME',      (0, 1),  (-1, -1), _FONT),
+        ('FONTSIZE',      (0, 1),  (-1, -1), 8),
+    ]))
     elements.append(main_table)
     elements.append(Spacer(1, 8 * mm))
 
     # ── Payment stamp ──
-    if order.payment_status == 'paid':
-        stamp_text = 'ОПЛАЧЕНО'
-        stamp_color = colors.HexColor('#10B981')
-    else:
-        stamp_text = 'НЕ ОПЛАЧЕНО'
-        stamp_color = colors.HexColor('#F43F5E')
-
-    stamp_ps = ParagraphStyle(
-        'stamp',
-        fontName='Helvetica-Bold',
-        fontSize=20,
-        textColor=stamp_color,
-        alignment=TA_RIGHT,
-    )
-    elements.append(Paragraph(stamp_text, stamp_ps))
-
+    paid = order.payment_status == 'paid'
+    stamp_color = colors.HexColor('#10B981') if paid else colors.HexColor('#F43F5E')
+    elements.append(Paragraph(
+        'ОПЛАЧЕНО' if paid else 'НЕ ОПЛАЧЕНО',
+        _ps('stamp', 22, bold=True, color=stamp_color, align=TA_RIGHT),
+    ))
     if order.payment_amount:
         elements.append(Paragraph(
-            f'Сумма оплаты: {order.payment_amount} сом',
-            ParagraphStyle('pay', fontName='Helvetica', fontSize=9, alignment=TA_RIGHT)
+            f'Сумма: {order.payment_amount} сом',
+            _ps('pay', 9, align=TA_RIGHT, color=colors.HexColor('#6B7280')),
         ))
 
-    def add_page_number(canvas, doc):
+    def _footer(canvas, doc):
         canvas.saveState()
-        canvas.setFont('Helvetica', 8)
-        canvas.setFillColor(colors.grey)
-        page_num = f'Стр. {canvas.getPageNumber()}'
-        canvas.drawRightString(A4[0] - 15 * mm, 10 * mm, page_num)
+        canvas.setFont(_FONT, 8)
+        canvas.setFillColor(colors.HexColor('#9CA3AF'))
+        canvas.drawRightString(A4[0] - 15 * mm, 10 * mm, f'Стр. {canvas.getPageNumber()}')
         canvas.restoreState()
 
-    doc.build(elements, onFirstPage=add_page_number, onLaterPages=add_page_number)
+    doc.build(elements, onFirstPage=_footer, onLaterPages=_footer)
     return buffer.getvalue()

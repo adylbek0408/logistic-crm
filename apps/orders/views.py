@@ -148,15 +148,78 @@ class DashboardStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        from django.db.models import Count
+        from django.db.models import Count, Sum, F, ExpressionWrapper, DecimalField
+        from django.db.models.functions import TruncMonth
+        from django.utils import timezone
+
         stats = Order.objects.aggregate(
             total=Count('id'),
             new=Count('id', filter=Q(status='new')),
             in_progress=Count('id', filter=Q(status='in_progress')),
             completed=Count('id', filter=Q(status='completed')),
         )
+
+        # Revenue = sum of done rows (quantity × price)
+        rev_expr = ExpressionWrapper(
+            F('quantity') * F('price'),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+        revenue_qs = OrderRow.objects.filter(
+            fulfillment_status='done',
+            quantity__isnull=False,
+            price__isnull=False,
+        ).annotate(row_total=rev_expr)
+
+        stats['total_revenue'] = float(revenue_qs.aggregate(s=Sum('row_total'))['s'] or 0)
+
+        now = timezone.now()
+        stats['month_revenue'] = float(
+            revenue_qs.filter(
+                order__created_at__year=now.year,
+                order__created_at__month=now.month,
+            ).aggregate(s=Sum('row_total'))['s'] or 0
+        )
+
+        # Top 6 clients by revenue
+        top = (
+            revenue_qs
+            .values(
+                'order__client__id',
+                'order__client__first_name',
+                'order__client__last_name',
+                'order__client__brand_name',
+            )
+            .annotate(
+                revenue=Sum('row_total'),
+                orders_count=Count('order', distinct=True),
+            )
+            .order_by('-revenue')[:6]
+        )
+        stats['top_clients'] = [
+            {
+                'id':           t['order__client__id'],
+                'name':         f"{t['order__client__first_name']} {t['order__client__last_name']}".strip(),
+                'brand':        t['order__client__brand_name'] or '',
+                'revenue':      float(t['revenue'] or 0),
+                'orders_count': t['orders_count'],
+            }
+            for t in top
+        ]
+
+        # Monthly revenue — last 6 months
+        monthly_qs = (
+            revenue_qs
+            .annotate(month=TruncMonth('order__created_at'))
+            .values('month')
+            .annotate(revenue=Sum('row_total'))
+            .order_by('-month')[:6]
+        )
+        stats['monthly'] = [
+            {
+                'month':   m['month'].strftime('%b %Y') if m['month'] else '',
+                'revenue': float(m['revenue'] or 0),
+            }
+            for m in monthly_qs
+        ]
+
         return Response(stats)
-
-
-# Fix missing import
-from django.db.models import Q

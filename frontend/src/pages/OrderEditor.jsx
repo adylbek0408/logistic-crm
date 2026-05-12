@@ -1,570 +1,753 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getOrder, updateOrder, updateOrderRow, generatePdf, downloadPdfUrl } from '../api/endpoints'
+import {
+  ArrowLeft, FileDown, CheckCircle2, XCircle, Circle,
+  ChevronDown, Loader2, ChevronLeft, ChevronRight, Search, X,
+} from 'lucide-react'
+import { getOrder, updateOrder, updateOrderRow, downloadPdf } from '../api/endpoints'
 import { useOrderWebSocket } from '../hooks/useWebSocket'
-import { formatDate, formatMoney, STATUS_LABELS, PAYMENT_LABELS, initials } from '../utils/format'
-import { Button } from '../components/ui/Button'
-import { Badge } from '../components/ui/Badge'
+import { formatDate, formatMoney, initials } from '../utils/format'
 import { Modal } from '../components/ui/Modal'
 import useAuthStore from '../store/auth'
 
-// ── Row component ─────────────────────────────────────────────────────────────
+const UNIT_LABELS = { kg: 'кг', pcs: 'шт', pack: 'пач', box: 'уп' }
 
-function OrderRowCard({ row, onUpdate, onLock, onUnlock, lockedBy, flash }) {
+const STATUS_OPTS = [
+  { val: 'new',         label: 'Новый',      dot: 'bg-blue-400' },
+  { val: 'in_progress', label: 'В процессе', dot: 'bg-amber-400' },
+  { val: 'completed',   label: 'Завершён',   dot: 'bg-emerald-500' },
+]
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function calcTotal(quantity, price) {
+  const q = parseFloat(quantity || 0)
+  const p = parseFloat(price || 0)
+  return q > 0 && p > 0 ? q * p : null
+}
+
+// ── Mobile card row ───────────────────────────────────────────────────────────
+
+const MobileRow = memo(function MobileRow({ row, onUpdate, onLock, onUnlock, lockedBy, flash, onLocalChange }) {
+  const localRef = useRef(row)
   const [local, setLocal] = useState(row)
-  const debounceRef = useRef(null)
+  const debounce = useRef(null)
 
   useEffect(() => {
+    localRef.current = row
     setLocal(row)
   }, [row.updated_at])
 
-  const handleChange = (key, value) => {
-    const updated = { ...local, [key]: value }
-    setLocal(updated)
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      onUpdate(row.id, { [key]: value })
-    }, 500)
+  const change = (key, val) => {
+    const next = { ...localRef.current, [key]: val }
+    localRef.current = next
+    setLocal(next)
+    onLocalChange(row.id, next)
+    clearTimeout(debounce.current)
+    debounce.current = setTimeout(() => onUpdate(row.id, { [key]: val }), 500)
   }
 
-  const handleFocus = () => onLock(row.id)
-  const handleBlur = () => onUnlock(row.id)
-
-  const total = local.quantity != null && local.price != null
-    ? (parseFloat(local.quantity) * parseFloat(local.price)).toFixed(2)
-    : null
-
-  const statusColor = local.fulfillment_status === 'done'
-    ? 'border-l-success' : local.fulfillment_status === 'failed'
-    ? 'border-l-danger' : 'border-l-gray-200'
-
-  const isLocked = !!lockedBy
-  const isFlashing = flash
+  const total = calcTotal(local.quantity, local.price)
+  const st = local.fulfillment_status
+  const borderColor = st === 'done' ? 'border-l-emerald-400' : st === 'failed' ? 'border-l-rose-400' : 'border-l-neutral-200'
 
   return (
-    <div className={`
-      bg-white rounded-lg border-l-2 border border-gray-100 p-3 transition-all
-      ${statusColor}
-      ${isLocked ? 'border-blue-300 ring-1 ring-blue-200' : ''}
-      ${isFlashing ? 'animate-pulse bg-amber-50' : ''}
+    <div className={`bg-white rounded-2xl border border-neutral-100 border-l-4 p-4 space-y-3 transition-colors
+      ${borderColor}
+      ${lockedBy ? 'bg-blue-50/30' : ''}
+      ${flash ? 'bg-amber-50' : ''}
     `}>
-      {/* Mobile layout */}
-      <div className="md:hidden space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-gray-400">#{row.row_number}</span>
-          {isLocked && (
-            <span className="text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
-              редактирует {lockedBy}
-            </span>
-          )}
-        </div>
-        <textarea
-          value={local.item_name || ''}
-          onChange={(e) => handleChange('item_name', e.target.value)}
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          placeholder="Огурец 3кг..."
-          rows={2}
-          className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-primary resize-none"
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-mono text-neutral-300">#{row.row_number}</span>
+        {lockedBy && (
+          <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+            ✎ {lockedBy}
+          </span>
+        )}
+      </div>
+
+      <textarea
+        value={local.item_name || ''}
+        onChange={(e) => change('item_name', e.target.value)}
+        onFocus={() => onLock(row.id)}
+        onBlur={() => onUnlock(row.id)}
+        placeholder="Наименование товара"
+        rows={2}
+        className="w-full px-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-xl outline-none focus:bg-white focus:border-primary/30 focus:ring-2 focus:ring-primary/10 resize-none"
+      />
+
+      <div className="grid grid-cols-3 gap-1.5">
+        {[
+          { val: 'done',   icon: CheckCircle2, label: 'Выполнен',  on: 'bg-emerald-500 text-white shadow-sm shadow-emerald-200' },
+          { val: 'failed', icon: XCircle,      label: 'Не выпол.', on: 'bg-rose-500 text-white shadow-sm shadow-rose-200' },
+          { val: 'empty',  icon: Circle,       label: 'Нету',      on: 'bg-neutral-200 text-neutral-700' },
+        ].map(({ val, icon: Icon, label, on }) => (
+          <button key={val} onClick={() => change('fulfillment_status', val)}
+            className={`mobile-tap flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-all ${
+              st === val ? on : 'bg-neutral-50 text-neutral-400 hover:bg-neutral-100'
+            }`}
+          >
+            <Icon size={13} />{label}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-2">
+        <input
+          type="number" inputMode="decimal" step="0.001" min="0"
+          value={local.quantity ?? ''} placeholder="Кол-во"
+          onChange={(e) => change('quantity', e.target.value || null)}
+          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          className="w-full min-h-touch px-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-xl outline-none focus:bg-white focus:border-primary/30 tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
-        {/* Status toggle */}
-        <div className="flex gap-1.5">
-          {[
-            { val: 'done', label: '✓', cls: 'bg-emerald-500 text-white' },
-            { val: 'failed', label: '✗', cls: 'bg-danger text-white' },
-            { val: 'empty', label: '○', cls: 'bg-gray-100 text-gray-500' },
-          ].map(({ val, label, cls }) => (
-            <button
-              key={val}
-              onClick={() => handleChange('fulfillment_status', val)}
-              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                local.fulfillment_status === val ? cls : 'bg-gray-50 text-gray-400 hover:bg-gray-100'
+        <div className="grid grid-cols-4 gap-1">
+          {Object.entries(UNIT_LABELS).map(([u, lbl]) => (
+            <button key={u} onClick={() => change('unit', u)}
+              className={`min-h-touch text-xs py-2 rounded-xl border font-medium transition-all ${
+                local.unit === u ? 'bg-primary text-white border-primary' : 'border-neutral-200 text-neutral-400 hover:border-primary/40'
               }`}
-            >
-              {label}
-            </button>
+            >{lbl}</button>
           ))}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.001"
-              value={local.quantity ?? ''}
-              onChange={(e) => handleChange('quantity', e.target.value || null)}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
-              placeholder="Кол-во"
-              className="w-full px-2 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-primary tabular"
-            />
-          </div>
-          <div className="flex gap-1">
-            {['kg', 'pcs', 'pack', 'box'].map((u) => (
-              <button
-                key={u}
-                onClick={() => handleChange('unit', u)}
-                className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors ${
-                  local.unit === u
-                    ? 'bg-primary text-white border-primary'
-                    : 'border-gray-200 text-gray-500 hover:border-primary/40'
-                }`}
-              >
-                {u === 'kg' ? 'кг' : u === 'pcs' ? 'шт' : u === 'pack' ? 'пач' : 'уп'}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            value={local.price ?? ''}
-            onChange={(e) => handleChange('price', e.target.value || null)}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            placeholder="Цена"
-            className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded-lg outline-none focus:border-primary tabular"
-          />
-          <div className="text-sm font-medium text-right tabular w-20">
-            {total != null ? `${total} с` : '—'}
-          </div>
         </div>
       </div>
 
-      {/* Desktop layout — handled by table */}
+      <div className="flex items-center gap-2">
+        <input
+          type="number" inputMode="decimal" step="0.01" min="0"
+          value={local.price ?? ''} placeholder="Цена (сом)"
+          onChange={(e) => change('price', e.target.value || null)}
+          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          className="flex-1 min-h-touch px-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-xl outline-none focus:bg-white focus:border-primary/30 tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <div className={`text-sm font-bold tabular px-3 py-2 rounded-xl min-w-[80px] text-right shrink-0 ${total != null ? 'bg-primary/5 text-primary' : 'text-neutral-300'}`}>
+          {total != null ? `${total.toFixed(2)} с` : '—'}
+        </div>
+      </div>
     </div>
   )
-}
+})
 
 // ── Desktop table row ─────────────────────────────────────────────────────────
 
-function TableRow({ row, onUpdate, onLock, onUnlock, lockedBy, flash }) {
+const TableRow = memo(function TableRow({ row, onUpdate, onLock, onUnlock, lockedBy, flash, onLocalChange }) {
+  const localRef = useRef(row)
   const [local, setLocal] = useState(row)
-  const debounceRef = useRef(null)
+  const debounce = useRef(null)
 
   useEffect(() => {
+    localRef.current = row
     setLocal(row)
   }, [row.updated_at])
 
-  const handleChange = (key, value) => {
-    const updated = { ...local, [key]: value }
-    setLocal(updated)
-    clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      onUpdate(row.id, { [key]: value })
-    }, 500)
+  const change = (key, val) => {
+    const next = { ...localRef.current, [key]: val }
+    localRef.current = next
+    setLocal(next)
+    onLocalChange(row.id, next)
+    clearTimeout(debounce.current)
+    debounce.current = setTimeout(() => onUpdate(row.id, { [key]: val }), 500)
   }
 
-  const total = local.quantity != null && local.price != null
-    ? (parseFloat(local.quantity || 0) * parseFloat(local.price || 0)).toFixed(2)
-    : null
-
-  const cellCls = `px-1 py-1`
-
-  const UNIT_LABELS = { kg: 'кг', pcs: 'шт', pack: 'пач', box: 'уп' }
+  const total = calcTotal(local.quantity, local.price)
+  const st = local.fulfillment_status
+  const leftBorder = st === 'done' ? 'border-l-emerald-400' : st === 'failed' ? 'border-l-rose-400' : 'border-l-transparent'
 
   return (
-    <tr className={`
-      group transition-all
-      ${row.fulfillment_status === 'done' ? 'border-l-2 border-l-success' : ''}
-      ${row.fulfillment_status === 'failed' ? 'border-l-2 border-l-danger' : ''}
-      ${row.fulfillment_status === 'empty' ? 'border-l-2 border-l-transparent' : ''}
-      ${lockedBy ? 'outline outline-2 outline-blue-300 bg-blue-50/30' : 'hover:bg-surface'}
-      ${flash ? 'bg-amber-50' : ''}
-    `}>
-      <td className={`${cellCls} text-xs text-gray-400 w-8 text-center`}>{row.row_number}</td>
-      <td className={`${cellCls} w-56`}>
+    <tr className={`group border-l-2 transition-colors ${leftBorder} ${lockedBy ? 'bg-blue-50/40' : 'hover:bg-neutral-50'} ${flash ? 'bg-amber-50' : ''}`}>
+      <td className="pl-4 pr-1 py-1.5 text-xs text-neutral-300 font-mono w-8 text-center select-none">{row.row_number}</td>
+      <td className="px-1 py-1 w-64">
         <textarea
           value={local.item_name || ''}
-          onChange={(e) => handleChange('item_name', e.target.value)}
-          onFocus={() => onLock(row.id)}
-          onBlur={() => onUnlock(row.id)}
-          placeholder="Огурец 3кг..."
+          onChange={(e) => change('item_name', e.target.value)}
+          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          placeholder="Наименование товара"
           rows={1}
-          className="w-full px-2 py-1 text-sm border-0 bg-transparent outline-none focus:bg-white focus:ring-1 focus:ring-primary/30 rounded resize-none"
+          className="w-full px-2 py-1.5 text-sm border-0 bg-transparent rounded-lg outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 resize-none"
           style={{ minHeight: '2rem' }}
         />
       </td>
-      <td className={`${cellCls} w-24`}>
+      <td className="px-1 py-1 w-28">
         <div className="flex gap-0.5">
           {[
-            { val: 'done', label: '✓', active: 'bg-emerald-500 text-white', hover: 'hover:bg-emerald-50' },
-            { val: 'failed', label: '✗', active: 'bg-danger text-white', hover: 'hover:bg-red-50' },
-            { val: 'empty', label: '○', active: 'bg-gray-200 text-gray-600', hover: 'hover:bg-gray-100' },
-          ].map(({ val, label, active, hover }) => (
-            <button
-              key={val}
-              onClick={() => handleChange('fulfillment_status', val)}
+            { val: 'done',   icon: CheckCircle2, on: 'bg-emerald-500 text-white' },
+            { val: 'failed', icon: XCircle,      on: 'bg-rose-500 text-white' },
+            { val: 'empty',  icon: Circle,       on: 'bg-neutral-200 text-neutral-600' },
+          ].map(({ val, icon: Icon, on }) => (
+            <button key={val} onClick={() => change('fulfillment_status', val)}
               title={val === 'done' ? 'Выполнен' : val === 'failed' ? 'Не выполнен' : 'Нету'}
-              className={`w-7 h-7 rounded text-xs font-bold transition-colors ${
-                local.fulfillment_status === val ? active : `text-gray-300 ${hover}`
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
+                st === val ? on : 'text-neutral-300 hover:text-neutral-500 hover:bg-neutral-100'
               }`}
             >
-              {label}
+              <Icon size={14} />
             </button>
           ))}
         </div>
       </td>
-      <td className={`${cellCls} w-24`}>
+      <td className="px-1 py-1 w-24">
         <input
-          type="number"
-          inputMode="decimal"
-          step="0.001"
+          type="number" inputMode="decimal" step="0.001" min="0"
           value={local.quantity ?? ''}
-          onChange={(e) => handleChange('quantity', e.target.value || null)}
-          onFocus={() => onLock(row.id)}
-          onBlur={() => onUnlock(row.id)}
-          className="w-full px-2 py-1 text-sm text-right border border-transparent hover:border-gray-200 focus:border-primary rounded outline-none tabular bg-transparent focus:bg-white"
+          onChange={(e) => change('quantity', e.target.value || null)}
+          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          className="w-full px-2 py-1.5 text-sm text-right bg-transparent border border-transparent hover:border-neutral-200 focus:border-primary/40 focus:bg-white rounded-lg outline-none tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
       </td>
-      <td className={`${cellCls} w-32`}>
+      <td className="px-1 py-1 w-36">
         <div className="flex gap-0.5">
-          {['kg', 'pcs', 'pack', 'box'].map((u) => (
-            <button
-              key={u}
-              onClick={() => handleChange('unit', u)}
-              className={`flex-1 text-xs py-1 rounded border transition-colors ${
-                local.unit === u
-                  ? 'bg-primary text-white border-primary'
-                  : 'border-gray-100 text-gray-400 hover:border-primary/40 hover:text-primary'
+          {Object.entries(UNIT_LABELS).map(([u, lbl]) => (
+            <button key={u} onClick={() => change('unit', u)}
+              className={`flex-1 text-xs py-1.5 rounded-lg border font-medium transition-all ${
+                local.unit === u ? 'bg-primary text-white border-primary' : 'border-neutral-100 text-neutral-400 hover:border-primary/30 hover:text-primary'
               }`}
-            >
-              {UNIT_LABELS[u]}
-            </button>
+            >{lbl}</button>
           ))}
         </div>
       </td>
-      <td className={`${cellCls} w-24`}>
+      <td className="px-1 py-1 w-28">
         <input
-          type="number"
-          inputMode="decimal"
-          step="0.01"
+          type="number" inputMode="decimal" step="0.01" min="0"
           value={local.price ?? ''}
-          onChange={(e) => handleChange('price', e.target.value || null)}
-          onFocus={() => onLock(row.id)}
-          onBlur={() => onUnlock(row.id)}
-          className="w-full px-2 py-1 text-sm text-right border border-transparent hover:border-gray-200 focus:border-primary rounded outline-none tabular bg-transparent focus:bg-white"
+          onChange={(e) => change('price', e.target.value || null)}
+          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          className="w-full px-2 py-1.5 text-sm text-right bg-transparent border border-transparent hover:border-neutral-200 focus:border-primary/40 focus:bg-white rounded-lg outline-none tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
       </td>
-      <td className={`${cellCls} w-24 text-right pr-3`}>
-        <span className="text-sm tabular font-medium text-gray-700">
-          {total != null ? total : ''}
+      <td className="pl-1 pr-4 py-1 w-28 text-right">
+        <span className={`text-sm tabular font-semibold ${total != null ? 'text-primary' : 'text-neutral-200'}`}>
+          {total != null ? total.toFixed(2) : ''}
         </span>
       </td>
     </tr>
   )
+})
+
+// ── Page nav ──────────────────────────────────────────────────────────────────
+
+function PageNav({ current, total, onChange }) {
+  if (total <= 1) return null
+  return (
+    <div className="flex items-center justify-center gap-3 py-3">
+      <button onClick={() => onChange(current - 1)} disabled={current === 1}
+        className="mobile-tap inline-flex items-center justify-center rounded-xl hover:bg-neutral-100 disabled:opacity-30 text-neutral-500 transition-colors">
+        <ChevronLeft size={15} />
+      </button>
+      <span className="text-xs text-neutral-500 font-semibold tabular">
+        Стр. {current} из {total}
+      </span>
+      <button onClick={() => onChange(current + 1)} disabled={current === total}
+        className="mobile-tap inline-flex items-center justify-center rounded-xl hover:bg-neutral-100 disabled:opacity-30 text-neutral-500 transition-colors">
+        <ChevronRight size={15} />
+      </button>
+    </div>
+  )
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Main OrderEditor ──────────────────────────────────────────────────────────
 
 export function OrderEditor() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuthStore()
   const qc = useQueryClient()
-  const [connected, setConnected] = useState(false)
-  const [activeUsers, setActiveUsers] = useState([])
-  const [locks, setLocks] = useState({})
-  const [flashRows, setFlashRows] = useState({})
+
+  const [pdfLoading, setPdfLoading]   = useState(false)
+  const [connected, setConnected]     = useState(false)
+  const [locks, setLocks]             = useState({})
+  const [flashRows, setFlashRows]     = useState({})
   const [showComplete, setShowComplete] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearch, setShowSearch]   = useState(false)
+
+  // rowStats: instant summary state — updated synchronously from each row
+  const [rowStats, setRowStats] = useState({})
+  const flashTimersRef = useRef({})
+
   const [completionForm, setCompletionForm] = useState({
-    sent_at: '', payment_status: 'unpaid', payment_amount: '', payment_receipt: null,
+    sent_at: new Date().toISOString().slice(0, 10),
+    payment_status: 'unpaid',
   })
 
-  const { data: order, isLoading } = useQuery({
-    queryKey: ['order', id],
-    queryFn: () => getOrder(id).then((r) => r.data),
+  const orderId = id && id !== 'undefined' ? id : null
+
+  const { data: order, isLoading, isError } = useQuery({
+    queryKey: ['order', orderId],
+    queryFn: () => getOrder(orderId).then((r) => r.data),
+    enabled: !!orderId,
+    staleTime: 60000,
   })
+
+  // Initialize rowStats when order first loads
+  useEffect(() => {
+    if (!order?.rows?.length) return
+    const init = {}
+    order.rows.forEach((r) => {
+      init[r.id] = {
+        fulfillment_status: r.fulfillment_status,
+        total: calcTotal(r.quantity, r.price),
+      }
+    })
+    setRowStats(init)
+  }, [order?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Instant summary — derived from rowStats, no HTTP needed
+  const { doneCount, totalAmount, progress } = useMemo(() => {
+    const rows = order?.rows || []
+    let done = 0, amount = 0
+    Object.values(rowStats).forEach(({ fulfillment_status, total }) => {
+      if (fulfillment_status === 'done') {
+        done++
+        if (total != null) amount += total
+      }
+    })
+    return {
+      doneCount: done,
+      totalAmount: amount,
+      progress: rows.length ? Math.round((done / rows.length) * 100) : 0,
+    }
+  }, [rowStats, order?.rows?.length])
 
   const rowUpdateMutation = useMutation({
-    mutationFn: ({ rowId, data }) => updateOrderRow(id, rowId, data),
-    onSuccess: () => qc.invalidateQueries(['order', id]),
+    mutationFn: ({ rowId, data }) => updateOrderRow(orderId, rowId, data),
   })
 
   const statusMutation = useMutation({
-    mutationFn: (status) => updateOrder(id, { status }),
-    onSuccess: () => qc.invalidateQueries(['order', id]),
+    mutationFn: (status) => updateOrder(orderId, { status }),
+    onSuccess: (res) => {
+      qc.setQueryData(['order', orderId], (old) => old ? { ...old, status: res.data.status } : old)
+    },
   })
 
   const completeMutation = useMutation({
-    mutationFn: (formData) => updateOrder(id, formData),
+    mutationFn: (fd) => updateOrder(orderId, fd),
     onSuccess: () => {
-      qc.invalidateQueries(['order', id])
+      qc.setQueryData(['order', orderId], (old) => old ? { ...old, status: 'completed' } : old)
       setShowComplete(false)
     },
   })
 
-  const { send } = useOrderWebSocket(id, {
-    onConnect: () => setConnected(true),
+  const { send } = useOrderWebSocket(orderId || '0', {
+    onConnect:    () => setConnected(true),
     onDisconnect: () => setConnected(false),
-    onMessage: (msg) => {
-      if (msg.event === 'user:joined') {
-        setActiveUsers((u) => [...u.filter((x) => x.id !== msg.user_id), { id: msg.user_id, name: msg.user_name }])
-      } else if (msg.event === 'user:left') {
-        setActiveUsers((u) => u.filter((x) => x.id !== msg.user_id))
-      } else if (msg.event === 'row:lock') {
-        if (msg.user_id !== user?.id) {
-          setLocks((l) => ({ ...l, [msg.row_id]: msg.user_name }))
-        }
+    onMessage: useCallback((msg) => {
+      if (msg.event === 'user:left') {
+        // no-op (removed user panel)
+      } else if (msg.event === 'row:lock' && msg.user_id !== user?.id) {
+        setLocks((l) => ({ ...l, [msg.row_id]: msg.user_name }))
       } else if (msg.event === 'row:unlock') {
         setLocks((l) => { const n = { ...l }; delete n[msg.row_id]; return n })
-      } else if (msg.event === 'row:updated') {
-        if (msg.user_id !== user?.id) {
-          qc.invalidateQueries(['order', id])
-          setFlashRows((f) => ({ ...f, [msg.row_id]: true }))
-          setTimeout(() => setFlashRows((f) => { const n = { ...f }; delete n[msg.row_id]; return n }), 800)
-        }
+      } else if (msg.event === 'row:updated' && msg.user_id !== user?.id) {
+        // Surgical cache update — no HTTP refetch
+        qc.setQueryData(['order', orderId], (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            rows: old.rows.map((r) =>
+              r.id === msg.row_id ? { ...r, ...msg.fields } : r
+            ),
+          }
+        })
+        // Also update rowStats for instant summary
+        setRowStats((prev) => ({
+          ...prev,
+          [msg.row_id]: {
+            fulfillment_status: msg.fields.fulfillment_status ?? prev[msg.row_id]?.fulfillment_status,
+            total: msg.fields.total != null
+              ? parseFloat(msg.fields.total)
+              : calcTotal(msg.fields.quantity, msg.fields.price) ?? prev[msg.row_id]?.total,
+          },
+        }))
+        setFlashRows((f) => ({ ...f, [msg.row_id]: true }))
+        clearTimeout(flashTimersRef.current[msg.row_id])
+        flashTimersRef.current[msg.row_id] = setTimeout(() => {
+          setFlashRows((f) => { const n = { ...f }; delete n[msg.row_id]; return n })
+        }, 800)
       } else if (msg.event === 'order:status') {
-        qc.invalidateQueries(['order', id])
+        qc.setQueryData(['order', orderId], (old) => old ? { ...old, status: msg.status } : old)
       }
-    },
+    }, [orderId, user?.id, qc]),
   })
+
+  // Called synchronously from each row on every change — no debounce
+  const handleLocalChange = useCallback((rowId, fullState) => {
+    setRowStats((prev) => ({
+      ...prev,
+      [rowId]: {
+        fulfillment_status: fullState.fulfillment_status,
+        total: calcTotal(fullState.quantity, fullState.price),
+      },
+    }))
+  }, [])
 
   const handleRowUpdate = useCallback((rowId, fields) => {
     rowUpdateMutation.mutate({ rowId, data: fields })
     send({ event: 'row:update', row_id: rowId, fields })
   }, [send])
 
-  const handleLock = useCallback((rowId) => {
-    send({ event: 'row:lock', row_id: rowId })
-  }, [send])
-
-  const handleUnlock = useCallback((rowId) => {
-    send({ event: 'row:unlock', row_id: rowId })
-  }, [send])
+  const handleLock   = useCallback((rowId) => send({ event: 'row:lock',   row_id: rowId }), [send])
+  const handleUnlock = useCallback((rowId) => send({ event: 'row:unlock', row_id: rowId }), [send])
 
   const handleStatusChange = (newStatus) => {
     statusMutation.mutate(newStatus)
     send({ event: 'order:status', status: newStatus })
   }
 
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true)
+    try {
+      const res = await downloadPdf(orderId)
+      const blob = new Blob([res.data], { type: 'application/pdf' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url
+      a.download = `invoice_${orderId}_${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(url)
+    } finally {
+      setPdfLoading(false)
+    }
+  }
+
   const handleComplete = (e) => {
     e.preventDefault()
-    const formData = new FormData()
-    formData.append('status', 'completed')
-    if (completionForm.sent_at) formData.append('sent_at', completionForm.sent_at)
-    formData.append('payment_status', completionForm.payment_status)
-    if (completionForm.payment_amount) formData.append('payment_amount', completionForm.payment_amount)
-    if (completionForm.payment_receipt) formData.append('payment_receipt', completionForm.payment_receipt)
-    completeMutation.mutate(formData)
+    const fd = new FormData()
+    fd.append('status', 'completed')
+    fd.append('payment_status', completionForm.payment_status)
+    if (completionForm.sent_at) fd.append('sent_at', completionForm.sent_at)
+    completeMutation.mutate(fd)
     send({ event: 'order:status', status: 'completed' })
   }
 
-  if (isLoading) return <div className="p-6 text-gray-400">Загрузка заказа...</div>
-  if (!order) return null
+  useEffect(() => {
+    return () => {
+      Object.values(flashTimersRef.current).forEach((t) => clearTimeout(t))
+      flashTimersRef.current = {}
+    }
+  }, [])
 
-  const rows = order.rows || []
-  const totalAmount = rows.reduce((sum, r) => {
-    if (r.fulfillment_status === 'done' && r.total) return sum + parseFloat(r.total)
-    return sum
-  }, 0)
+  // ── Data ──
+  // Keep hook order stable across loading/error states.
+  const rows = order?.rows || []
+  const perPage = order?.template_rows_per_page || 20
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter((r) =>
+      String(r.row_number).includes(q.replace('#', '')) ||
+      (r.item_name && r.item_name.toLowerCase().includes(q))
+    )
+  }, [rows, searchQuery])
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / perPage))
+  const safePage = Math.min(currentPage, totalPages)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery])
+
+  const displayRows = useMemo(() => {
+    return filteredRows.slice((safePage - 1) * perPage, safePage * perPage)
+  }, [filteredRows, safePage, perPage])
+
+  const isSearching = searchQuery.trim().length > 0
+  const currentStatus = STATUS_OPTS.find((s) => s.val === order?.status) || STATUS_OPTS[0]
+
+  // ── Guards ──
+  if (!orderId) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center p-6">
+      <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center">
+        <XCircle size={24} className="text-rose-400" />
+      </div>
+      <div className="font-semibold text-neutral-700">Заказ не найден</div>
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium">
+        <ArrowLeft size={14} /> Назад
+      </button>
+    </div>
+  )
+
+  if (isLoading) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-3">
+      <Loader2 size={26} className="text-primary animate-spin" />
+      <div className="text-sm text-neutral-400">Загрузка заказа...</div>
+    </div>
+  )
+
+  if (isError || !order) return (
+    <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center p-6">
+      <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center">
+        <XCircle size={24} className="text-rose-400" />
+      </div>
+      <div className="font-semibold text-neutral-700">Ошибка загрузки</div>
+      <button onClick={() => navigate(-1)} className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium">
+        <ArrowLeft size={14} /> Назад
+      </button>
+    </div>
+  )
 
   return (
-    <div className="flex flex-col min-h-screen">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 md:px-6 py-3 sticky top-0 z-30">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <Link to={`/clients/${order.client}`} className="text-gray-400 hover:text-primary text-sm">
-              ← Клиент
+    <div className="flex flex-col min-h-screen bg-neutral-50">
+
+      {/* ── Header ── */}
+      <div className="bg-white border-b border-neutral-100 px-3.5 md:px-6 py-2.5 sticky top-0 z-30 shadow-sm safe-top">
+        <div className="flex items-center justify-between gap-2">
+
+          {/* Left */}
+          <div className="flex items-center gap-2 min-w-0 shrink">
+            <Link to={`/clients/${order.client}`}
+              className="mobile-tap inline-flex items-center justify-center rounded-xl hover:bg-neutral-100 text-neutral-400 hover:text-primary transition-colors shrink-0">
+              <ArrowLeft size={18} />
             </Link>
-            <div>
-              <div className="font-semibold text-primary text-sm md:text-base">
-                Заказ #{order.id} — {order.client_brand || order.client_name}
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-bold text-primary text-sm md:text-base truncate">
+                  {order.client_brand || order.client_name}
+                </span>
+                <span className="text-[11px] text-neutral-400 bg-neutral-100 px-1.5 py-0.5 rounded-md font-mono shrink-0">
+                  #{order.id}
+                </span>
               </div>
-              <div className="text-xs text-gray-400">{formatDate(order.created_at)}</div>
+              <div className="text-[11px] text-neutral-400">{formatDate(order.created_at)}</div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Active users */}
-            <div className="flex -space-x-2">
-              {activeUsers.map((u) => (
-                <div
-                  key={u.id}
-                  title={u.name}
-                  className="w-7 h-7 rounded-full bg-accent flex items-center justify-center text-white text-xs font-bold ring-2 ring-white"
-                >
-                  {initials(u.name)}
-                </div>
-              ))}
-            </div>
+          {/* Right */}
+          <div className="flex items-center gap-1.5 shrink-0">
 
-            {/* Status select */}
-            <select
-              value={order.status}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 text-sm outline-none focus:border-primary"
-            >
-              <option value="new">Новый</option>
-              <option value="in_progress">В процессе</option>
-              <option value="completed">Завершён</option>
-            </select>
-
-            {user?.role === 'owner' && (
-              <Button size="sm" variant="accent" onClick={() => setShowComplete(true)}>
-                Завершить
-              </Button>
+            {/* Connection dot — compact, only if disconnected */}
+            {!connected && (
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="Нет соединения" />
             )}
 
-            <a
-              href={downloadPdfUrl(id)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm px-3 py-1.5 rounded-lg border border-gray-200 hover:border-primary text-gray-600 hover:text-primary transition-colors"
+            {/* Status */}
+            {user?.role === 'owner' ? (
+              <div className="relative">
+                <select
+                  value={order.status}
+                  onChange={(e) => handleStatusChange(e.target.value)}
+                  className="appearance-none pl-6 pr-6 py-1.5 rounded-xl border border-neutral-200 text-xs font-semibold outline-none focus:border-primary bg-white cursor-pointer"
+                >
+                  {STATUS_OPTS.map((s) => <option key={s.val} value={s.val}>{s.label}</option>)}
+                </select>
+                <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${currentStatus.dot}`} />
+                <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+              </div>
+            ) : (
+              <span className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${
+                order.status === 'new'         ? 'bg-blue-50 text-blue-700 border-blue-100' :
+                order.status === 'in_progress' ? 'bg-amber-50 text-amber-700 border-amber-100' :
+                                                 'bg-emerald-50 text-emerald-700 border-emerald-100'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${currentStatus.dot}`} />
+                {currentStatus.label}
+              </span>
+            )}
+
+            {user?.role === 'owner' && (
+              <button onClick={() => setShowComplete(true)}
+                className="hidden sm:inline-flex min-h-touch px-3 bg-accent text-white rounded-xl text-xs font-bold hover:bg-amber-500 transition-colors items-center">
+                Завершить
+              </button>
+            )}
+            {user?.role === 'owner' && (
+              <button onClick={() => setShowComplete(true)}
+                className="sm:hidden mobile-tap inline-flex items-center justify-center rounded-xl bg-accent text-white hover:bg-amber-500 transition-colors"
+                title="Завершить заказ">
+                <CheckCircle2 size={14} />
+              </button>
+            )}
+
+            <button onClick={handleDownloadPdf} disabled={pdfLoading}
+              className="mobile-tap inline-flex items-center justify-center gap-1 px-2.5 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all disabled:opacity-50">
+              {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+              <span className="hidden sm:inline">PDF</span>
+            </button>
+
+            {/* Search — desktop inline, mobile toggle */}
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-neutral-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 bg-white transition-all w-44">
+              <Search size={13} className="text-neutral-400 shrink-0" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск строки..."
+                className="flex-1 text-xs outline-none bg-transparent placeholder:text-neutral-300 min-w-0"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')}>
+                  <X size={11} className="text-neutral-400 hover:text-neutral-600" />
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => { setShowSearch(s => !s); if (showSearch) setSearchQuery('') }}
+              className={`md:hidden mobile-tap inline-flex items-center justify-center rounded-xl border transition-colors ${
+                showSearch || searchQuery ? 'border-primary text-primary bg-primary/5' : 'border-neutral-200 text-neutral-500'
+              }`}
             >
-              PDF
-            </a>
+              {showSearch || searchQuery ? <X size={15} /> : <Search size={15} />}
+            </button>
           </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-2.5 flex items-center gap-3">
+          <div className="flex-1 bg-neutral-100 rounded-full h-1">
+            <div
+              className={`h-1 rounded-full transition-all duration-300 ${progress === 100 ? 'bg-emerald-500' : 'bg-amber-400'}`}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <span className="text-xs text-neutral-500 tabular shrink-0 font-medium">
+            {doneCount}/{rows.length} · {formatMoney(totalAmount)} сом
+          </span>
         </div>
       </div>
 
-      {/* No connection banner */}
-      {!connected && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-700 text-center">
-          Нет соединения. Переподключение...
+      {/* Mobile search bar */}
+      {showSearch && (
+        <div className="md:hidden bg-white border-b border-neutral-100 px-4 py-2">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-neutral-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 bg-neutral-50">
+            <Search size={14} className="text-neutral-400 shrink-0" />
+            <input
+              autoFocus
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск по номеру или названию..."
+              className="flex-1 text-sm outline-none bg-transparent placeholder:text-neutral-400"
+            />
+          </div>
         </div>
       )}
 
-      {/* Desktop table */}
-      <div className="hidden md:block flex-1 overflow-x-auto">
-        <table className="w-full text-sm border-separate border-spacing-0">
-          <thead className="sticky top-[57px] bg-white z-20">
-            <tr className="text-xs text-gray-400 uppercase tracking-wider">
-              <th className="px-3 py-2 text-center font-medium w-8">№</th>
-              <th className="px-1 py-2 text-left font-medium w-56">Наименование</th>
-              <th className="px-1 py-2 text-left font-medium w-24">Статус</th>
-              <th className="px-1 py-2 text-right font-medium w-24">Кол-во</th>
-              <th className="px-1 py-2 text-left font-medium w-32">Ед.</th>
-              <th className="px-1 py-2 text-right font-medium w-24">Цена</th>
-              <th className="px-3 py-2 text-right font-medium w-24">Итог</th>
+      {/* WS banner */}
+      {!connected && (
+        <div className="bg-amber-50 border-b border-amber-100 px-4 py-1.5 flex items-center justify-center gap-2 text-xs text-amber-600">
+          Нет соединения — переподключение...
+        </div>
+      )}
+
+      {/* ── Desktop table ── */}
+      <div className="hidden md:block flex-1 overflow-auto bg-white mx-4 mt-4 rounded-2xl border border-neutral-100 shadow-panel">
+        <table className="w-full min-w-[980px] text-sm border-separate border-spacing-0">
+          <thead className="sticky top-0 z-20 bg-white">
+            <tr className="text-[11px] text-neutral-400 uppercase tracking-widest border-b border-neutral-100">
+              <th className="pl-4 pr-1 py-3 text-center font-medium w-8">№</th>
+              <th className="px-1 py-3 text-left font-medium w-64">Наименование</th>
+              <th className="px-1 py-3 text-left font-medium w-28">Статус</th>
+              <th className="px-1 py-3 text-right font-medium w-24">Кол-во</th>
+              <th className="px-1 py-3 text-center font-medium w-36">Ед.</th>
+              <th className="px-1 py-3 text-right font-medium w-28">Цена</th>
+              <th className="pl-1 pr-4 py-3 text-right font-medium w-28">Итог</th>
             </tr>
-            <tr><td colSpan={7} className="border-b border-gray-100"></td></tr>
           </thead>
-          <tbody>
-            {rows.map((row) => (
+          <tbody className="divide-y divide-neutral-100">
+            {displayRows.map((row) => (
               <TableRow
-                key={row.id}
-                row={row}
-                onUpdate={handleRowUpdate}
-                onLock={handleLock}
-                onUnlock={handleUnlock}
-                lockedBy={locks[row.id]}
-                flash={flashRows[row.id]}
+                key={row.id} row={row}
+                onUpdate={handleRowUpdate} onLock={handleLock} onUnlock={handleUnlock}
+                onLocalChange={handleLocalChange}
+                lockedBy={locks[row.id]} flash={flashRows[row.id]}
               />
             ))}
           </tbody>
-          <tfoot className="bg-surface sticky bottom-0">
-            <tr>
-              <td colSpan={6} className="px-3 py-3 text-right text-sm font-medium text-gray-600">
-                Итого (выполненные):
+          <tfoot>
+            <tr className="bg-primary/5 border-t-2 border-primary/10">
+              <td colSpan={6} className="pl-4 pr-3 py-3 text-right text-sm font-semibold text-primary">
+                Итого по выполненным:
               </td>
-              <td className="px-3 py-3 text-right text-sm font-bold text-primary tabular">
+              <td className="pr-4 py-3 text-right text-base font-black text-primary tabular">
                 {formatMoney(totalAmount)}
               </td>
             </tr>
           </tfoot>
         </table>
+        {!isSearching && <PageNav current={safePage} total={totalPages} onChange={setCurrentPage} />}
+        {isSearching && displayRows.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-neutral-400 text-sm">Ничего не найдено по запросу «{searchQuery}»</div>
+          </div>
+        )}
+        {isSearching && displayRows.length > 0 && (
+          <div className="text-center py-2 text-xs text-neutral-400">
+            Найдено {filteredRows.length} строк
+          </div>
+        )}
       </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden p-3 space-y-2 flex-1 pb-20">
-        {rows.map((row) => (
-          <OrderRowCard
-            key={row.id}
-            row={row}
-            onUpdate={handleRowUpdate}
-            onLock={handleLock}
-            onUnlock={handleUnlock}
-            lockedBy={locks[row.id]}
-            flash={flashRows[row.id]}
+      {/* ── Mobile cards ── */}
+      <div className="md:hidden p-3 space-y-2 pb-24">
+        {displayRows.map((row) => (
+          <MobileRow
+            key={row.id} row={row}
+            onUpdate={handleRowUpdate} onLock={handleLock} onUnlock={handleUnlock}
+            onLocalChange={handleLocalChange}
+            lockedBy={locks[row.id]} flash={flashRows[row.id]}
           />
         ))}
-        <div className="bg-white rounded-xl border border-gray-100 p-4 text-right">
-          <span className="text-sm text-gray-500 mr-3">Итого (выполненные):</span>
-          <span className="text-lg font-bold text-primary tabular">{formatMoney(totalAmount)}</span>
+        {!isSearching && <PageNav current={safePage} total={totalPages} onChange={(p) => { setCurrentPage(p); window.scrollTo(0, 0) }} />}
+        {isSearching && displayRows.length === 0 && (
+          <div className="text-center py-10 text-sm text-neutral-400">
+            Ничего не найдено
+          </div>
+        )}
+        {isSearching && filteredRows.length > 0 && (
+          <div className="text-center py-2 text-xs text-neutral-400">
+            Найдено {filteredRows.length} строк
+          </div>
+        )}
+        {/* Summary card */}
+        <div className="bg-gradient-to-r from-primary to-primary-500 rounded-2xl p-4 text-white mt-1">
+          <div className="text-xs text-white/60 mb-0.5">Итого (выполненные)</div>
+          <div className="text-2xl font-black tabular">{formatMoney(totalAmount)} сом</div>
+          <div className="text-xs text-white/50 mt-1">{doneCount} из {rows.length} строк · {progress}%</div>
         </div>
       </div>
 
-      {/* Completion Modal */}
-      <Modal open={showComplete} onClose={() => setShowComplete(false)} title="Завершение заказа">
+      {/* ── Completion Modal ── */}
+      <Modal open={showComplete} onClose={() => setShowComplete(false)} title="Завершение заказа" size="sm">
         <form onSubmit={handleComplete} className="space-y-4">
+          <div className="bg-gradient-to-br from-primary to-primary-500 rounded-2xl p-4 text-white">
+            <div className="text-xs text-white/60 mb-0.5">Сумма по выполненным</div>
+            <div className="text-3xl font-black tabular">{formatMoney(totalAmount)} <span className="text-base font-medium opacity-70">сом</span></div>
+            <div className="text-xs text-white/50 mt-1">{doneCount} из {rows.length} строк · {progress}%</div>
+          </div>
+
           <div>
-            <label className="text-sm font-medium text-gray-700">Дата отправки</label>
-            <input
-              type="date"
-              value={completionForm.sent_at}
+            <label className="text-sm font-semibold text-neutral-700 block mb-1.5">Дата отправки</label>
+            <input type="date" value={completionForm.sent_at}
               onChange={(e) => setCompletionForm((f) => ({ ...f, sent_at: e.target.value }))}
-              className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-primary"
+              className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary"
             />
           </div>
+
           <div>
-            <label className="text-sm font-medium text-gray-700">Статус оплаты</label>
-            <div className="flex gap-3 mt-1">
+            <label className="text-sm font-semibold text-neutral-700 block mb-2">Статус оплаты</label>
+            <div className="grid grid-cols-2 gap-2">
               {[
-                { val: 'paid', label: 'Оплачен', cls: 'border-success text-success' },
-                { val: 'unpaid', label: 'Не оплачен', cls: 'border-gray-300 text-gray-500' },
-              ].map(({ val, label, cls }) => (
-                <button
-                  key={val}
-                  type="button"
+                { val: 'paid',   label: '✓ Оплачен',    on: 'bg-success text-white border-success' },
+                { val: 'unpaid', label: '✗ Не оплачен', on: 'bg-neutral-200 text-neutral-700 border-neutral-200' },
+              ].map(({ val, label, on }) => (
+                <button key={val} type="button"
                   onClick={() => setCompletionForm((f) => ({ ...f, payment_status: val }))}
-                  className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition-colors ${
-                    completionForm.payment_status === val ? cls : 'border-gray-100 text-gray-300'
+                  className={`py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                    completionForm.payment_status === val ? on : 'border-neutral-200 text-neutral-400 hover:border-neutral-300'
                   }`}
-                >
-                  {label}
-                </button>
+                >{label}</button>
               ))}
             </div>
           </div>
-          {completionForm.payment_status === 'paid' && (
-            <>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Сумма оплаты</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={completionForm.payment_amount}
-                  onChange={(e) => setCompletionForm((f) => ({ ...f, payment_amount: e.target.value }))}
-                  className="mt-1 w-full px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-primary tabular"
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Загрузить чек</label>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf"
-                  onChange={(e) => setCompletionForm((f) => ({ ...f, payment_receipt: e.target.files[0] }))}
-                  className="mt-1 w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-primary file:text-white file:text-xs hover:file:bg-primary-500"
-                />
-              </div>
-            </>
-          )}
-          <div className="bg-surface rounded-lg px-4 py-3">
-            <div className="text-sm text-gray-500">Итоговая сумма по выполненным строкам:</div>
-            <div className="text-xl font-bold text-primary tabular">{formatMoney(totalAmount)} сом</div>
-          </div>
 
-          {/* PDF preview hint */}
-          {order.pdf_file && (
-            <div className="border border-gray-100 rounded-lg overflow-hidden" style={{ height: '200px' }}>
-              <iframe
-                src={`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${order.pdf_file}`}
-                className="w-full h-full"
-                title="Предпросмотр PDF"
-              />
-            </div>
-          )}
-
-          <div className="flex gap-3 justify-end pt-2">
-            <Button type="button" variant="secondary" onClick={() => setShowComplete(false)}>Отмена</Button>
-            <Button type="submit" disabled={completeMutation.isLoading}>
-              {completeMutation.isLoading ? 'Сохранение...' : 'Завершить заказ'}
-            </Button>
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={() => setShowComplete(false)}
+              className="flex-1 py-2.5 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-600 hover:bg-neutral-50">
+              Отмена
+            </button>
+            <button type="submit" disabled={completeMutation.isLoading}
+              className="flex-1 py-2.5 rounded-xl bg-primary text-white text-sm font-semibold hover:bg-primary-500 disabled:opacity-60 flex items-center justify-center gap-2">
+              {completeMutation.isLoading && <Loader2 size={13} className="animate-spin" />}
+              Завершить заказ
+            </button>
           </div>
         </form>
       </Modal>

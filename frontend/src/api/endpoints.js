@@ -26,8 +26,8 @@ export const updateOrder = (id, data) => api.patch(`/api/orders/${id}/`, data, {
 export const updateOrderRow = (orderId, rowId, data) =>
   api.patch(`/api/orders/${orderId}/rows/${rowId}/`, data)
 export const generatePdf = (id) => api.post(`/api/orders/${id}/generate-pdf/`)
-export const downloadPdfUrl = (id) =>
-  `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/api/orders/${id}/download-pdf/`
+export const downloadPdf = (id) =>
+  api.get(`/api/orders/${id}/download-pdf/`, { responseType: 'blob' })
 
 // Dashboard
 export const getDashboardStats = () => api.get('/api/dashboard/stats/')

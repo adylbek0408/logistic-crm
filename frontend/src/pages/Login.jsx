@@ -18,8 +18,6 @@ export function Login() {
     setLoading(true)
     try {
       const { data: tokens } = await login(form)
-      const { data: user } = await getMe()
-      // getMe needs the token set first
       localStorage.setItem('access_token', tokens.access)
       localStorage.setItem('refresh_token', tokens.refresh)
       const { data: me } = await getMe()
@@ -33,15 +31,15 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center p-4">
+    <div className="min-h-screen bg-neutral-50 flex items-center justify-center p-4 safe-top safe-bottom">
       <div className="w-full max-w-sm">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
-          <div className="text-center mb-8">
+        <div className="bg-white rounded-2xl shadow-panel border border-neutral-200 p-6 sm:p-8">
+          <div className="text-center mb-6 sm:mb-8">
             <div className="w-12 h-12 bg-primary rounded-xl flex items-center justify-center mx-auto mb-4 text-white text-xl font-bold">
               L
             </div>
-            <h1 className="text-2xl font-bold text-primary">Logistic CRM</h1>
-            <p className="text-sm text-gray-500 mt-1">Войдите в систему</p>
+            <h1 className="text-mobile-title md:text-2xl font-bold text-primary">Logistic CRM</h1>
+            <p className="text-sm text-neutral-500 mt-1">Войдите в систему</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
@@ -63,7 +61,7 @@ export function Login() {
               required
             />
             {error && (
-              <div className="bg-red-50 border border-red-100 text-danger text-sm rounded-lg px-4 py-2.5">
+              <div className="bg-red-50 border border-red-100 text-danger text-sm rounded-xl px-4 py-2.5">
                 {error}
               </div>
             )}

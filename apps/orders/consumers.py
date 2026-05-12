@@ -1,7 +1,6 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from django.utils import timezone
 
 
 class OrderConsumer(AsyncWebsocketConsumer):
@@ -17,7 +16,6 @@ class OrderConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_add(self.group_name, self.channel_name)
         await self.accept()
 
-        # Notify others
         await self.channel_layer.group_send(self.group_name, {
             'type': 'broadcast',
             'payload': {
@@ -60,8 +58,8 @@ class OrderConsumer(AsyncWebsocketConsumer):
         row_id = data.get('row_id')
         fields = data.get('fields', {})
 
-        updated_row = await self._save_row(row_id, fields)
-        if not updated_row:
+        result = await self._save_row(row_id, fields)
+        if not result:
             return
 
         await self.channel_layer.group_send(self.group_name, {
@@ -69,11 +67,22 @@ class OrderConsumer(AsyncWebsocketConsumer):
             'payload': {
                 'event': 'row:updated',
                 'row_id': row_id,
-                'fields': updated_row,
+                'fields': result['row'],
                 'user_id': self.user.id,
                 'user_name': self.user.full_name or self.user.username,
             }
         })
+
+        # Auto-transition new → in_progress broadcast
+        if result.get('status_changed'):
+            await self.channel_layer.group_send(self.group_name, {
+                'type': 'broadcast',
+                'payload': {
+                    'event': 'order:status',
+                    'status': result['status_changed'],
+                    'auto': True,
+                }
+            })
 
     async def _handle_row_lock(self, data):
         row_id = data.get('row_id')
@@ -112,7 +121,8 @@ class OrderConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _save_row(self, row_id, fields):
-        from .models import OrderRow
+        from .models import Order, OrderRow
+
         allowed = {'item_name', 'fulfillment_status', 'quantity', 'unit', 'price'}
         try:
             row = OrderRow.objects.select_related('order').get(
@@ -121,13 +131,17 @@ class OrderConsumer(AsyncWebsocketConsumer):
             )
             for key, val in fields.items():
                 if key in allowed:
-                    setattr(row, key, val if val != '' else None if key in ('quantity', 'price') else val)
+                    if key in ('quantity', 'price') and val == '':
+                        val = None
+                    setattr(row, key, val)
             row.updated_by = self.user
             row.save()
+
             total = None
             if row.quantity is not None and row.price is not None:
                 total = float(row.quantity * row.price)
-            return {
+
+            row_data = {
                 'item_name': row.item_name,
                 'fulfillment_status': row.fulfillment_status,
                 'quantity': str(row.quantity) if row.quantity is not None else None,
@@ -137,6 +151,17 @@ class OrderConsumer(AsyncWebsocketConsumer):
                 'updated_at': row.updated_at.isoformat(),
                 'row_number': row.row_number,
             }
+
+            # Auto-transition: new → in_progress on first edit of any field
+            status_changed = None
+            if row.order.status == 'new':
+                updated = Order.objects.filter(
+                    pk=self.order_id, status='new'
+                ).update(status='in_progress')
+                if updated:
+                    status_changed = 'in_progress'
+
+            return {'row': row_data, 'status_changed': status_changed}
         except OrderRow.DoesNotExist:
             return None
 

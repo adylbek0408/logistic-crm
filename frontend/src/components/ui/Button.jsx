@@ -1,16 +1,16 @@
 export function Button({ children, variant = 'primary', size = 'md', className = '', ...props }) {
-  const base = 'inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed'
+  const base = 'inline-flex items-center justify-center font-medium rounded-xl transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed select-none'
   const variants = {
-    primary: 'bg-primary text-white hover:bg-primary-500 focus:ring-primary',
-    secondary: 'bg-white text-primary border border-gray-200 hover:bg-gray-50 focus:ring-primary',
-    danger: 'bg-danger text-white hover:bg-red-600 focus:ring-danger',
-    ghost: 'text-gray-600 hover:bg-gray-100 focus:ring-gray-300',
-    accent: 'bg-accent text-white hover:bg-amber-500 focus:ring-accent',
+    primary: 'bg-primary text-white hover:bg-primary-500 active:translate-y-px focus-visible:ring-primary',
+    secondary: 'bg-white text-primary border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 active:translate-y-px focus-visible:ring-primary',
+    danger: 'bg-danger text-white hover:bg-rose-600 active:translate-y-px focus-visible:ring-danger',
+    ghost: 'text-neutral-600 hover:bg-neutral-100 focus-visible:ring-neutral-400',
+    accent: 'bg-accent text-white hover:bg-amber-500 active:translate-y-px focus-visible:ring-accent',
   }
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm gap-1.5',
-    md: 'px-4 py-2 text-sm gap-2',
-    lg: 'px-5 py-2.5 text-base gap-2',
+    sm: 'min-h-touch px-3 text-sm gap-1.5',
+    md: 'min-h-touch px-4 text-sm gap-2',
+    lg: 'min-h-touch px-5 text-sm gap-2',
   }
   return (
     <button className={`${base} ${variants[variant]} ${sizes[size]} ${className}`} {...props}>

@@ -8,6 +8,7 @@ import { ClientDetail } from './pages/ClientDetail'
 import { Orders } from './pages/Orders'
 import { OrderEditor } from './pages/OrderEditor'
 import { Templates } from './pages/Templates'
+import { ToastProvider } from './components/ui/Toast'
 import useAuthStore from './store/auth'
 import { useEffect } from 'react'
 import { getMe } from './api/endpoints'
@@ -37,6 +38,7 @@ function AuthLoader({ children }) {
 export default function App() {
   return (
     <QueryClientProvider client={qc}>
+      <ToastProvider>
       <BrowserRouter>
         <AuthLoader>
           <Routes>
@@ -59,6 +61,7 @@ export default function App() {
           </Routes>
         </AuthLoader>
       </BrowserRouter>
+      </ToastProvider>
     </QueryClientProvider>
   )
 }

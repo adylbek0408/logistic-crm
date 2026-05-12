@@ -37,6 +37,8 @@ class OrderSerializer(serializers.ModelSerializer):
     client_name = serializers.CharField(source='client.display_name', read_only=True)
     client_brand = serializers.CharField(source='client.brand_name', read_only=True)
     template_name = serializers.CharField(source='template.name', read_only=True, default='')
+    template_rows_per_page = serializers.IntegerField(source='template.rows_per_page', read_only=True, default=20)
+    template_pages = serializers.IntegerField(source='template.pages', read_only=True, default=1)
     created_by_name = serializers.CharField(source='created_by.full_name', read_only=True, default='')
     total_amount = serializers.SerializerMethodField()
 
@@ -44,8 +46,8 @@ class OrderSerializer(serializers.ModelSerializer):
         model = Order
         fields = [
             'id', 'client', 'client_name', 'client_brand',
-            'template', 'template_name', 'status',
-            'created_by_name', 'created_at', 'updated_at', 'sent_at',
+            'template', 'template_name', 'template_rows_per_page', 'template_pages',
+            'status', 'created_by_name', 'created_at', 'updated_at', 'sent_at',
             'payment_status', 'payment_amount', 'payment_receipt',
             'notes', 'pdf_file', 'rows', 'total_amount',
         ]
@@ -62,7 +64,8 @@ class OrderSerializer(serializers.ModelSerializer):
 class OrderCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
-        fields = ['client', 'template', 'notes']
+        fields = ['id', 'client', 'template', 'notes']
+        read_only_fields = ['id']
 
     def create(self, validated_data):
         template = validated_data.get('template')
