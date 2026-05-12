@@ -170,56 +170,55 @@ class DashboardStatsView(APIView):
             price__isnull=False,
         ).annotate(row_total=rev_expr)
 
-        stats['total_revenue'] = float(revenue_qs.aggregate(s=Sum('row_total'))['s'] or 0)
+        if request.user.is_owner:
+            stats['total_revenue'] = float(revenue_qs.aggregate(s=Sum('row_total'))['s'] or 0)
 
-        now = timezone.now()
-        stats['month_revenue'] = float(
-            revenue_qs.filter(
-                order__created_at__year=now.year,
-                order__created_at__month=now.month,
-            ).aggregate(s=Sum('row_total'))['s'] or 0
-        )
-
-        # Top 6 clients by revenue
-        top = (
-            revenue_qs
-            .values(
-                'order__client__id',
-                'order__client__first_name',
-                'order__client__last_name',
-                'order__client__brand_name',
+            now = timezone.now()
+            stats['month_revenue'] = float(
+                revenue_qs.filter(
+                    order__created_at__year=now.year,
+                    order__created_at__month=now.month,
+                ).aggregate(s=Sum('row_total'))['s'] or 0
             )
-            .annotate(
-                revenue=Sum('row_total'),
-                orders_count=Count('order', distinct=True),
-            )
-            .order_by('-revenue')[:6]
-        )
-        stats['top_clients'] = [
-            {
-                'id':           t['order__client__id'],
-                'name':         f"{t['order__client__first_name']} {t['order__client__last_name']}".strip(),
-                'brand':        t['order__client__brand_name'] or '',
-                'revenue':      float(t['revenue'] or 0),
-                'orders_count': t['orders_count'],
-            }
-            for t in top
-        ]
 
-        # Monthly revenue — last 6 months
-        monthly_qs = (
-            revenue_qs
-            .annotate(month=TruncMonth('order__created_at'))
-            .values('month')
-            .annotate(revenue=Sum('row_total'))
-            .order_by('-month')[:6]
-        )
-        stats['monthly'] = [
-            {
-                'month':   m['month'].strftime('%b %Y') if m['month'] else '',
-                'revenue': float(m['revenue'] or 0),
-            }
-            for m in monthly_qs
-        ]
+            top = (
+                revenue_qs
+                .values(
+                    'order__client__id',
+                    'order__client__first_name',
+                    'order__client__last_name',
+                    'order__client__brand_name',
+                )
+                .annotate(
+                    revenue=Sum('row_total'),
+                    orders_count=Count('order', distinct=True),
+                )
+                .order_by('-revenue')[:6]
+            )
+            stats['top_clients'] = [
+                {
+                    'id':           t['order__client__id'],
+                    'name':         f"{t['order__client__first_name']} {t['order__client__last_name']}".strip(),
+                    'brand':        t['order__client__brand_name'] or '',
+                    'revenue':      float(t['revenue'] or 0),
+                    'orders_count': t['orders_count'],
+                }
+                for t in top
+            ]
+
+            monthly_qs = (
+                revenue_qs
+                .annotate(month=TruncMonth('order__created_at'))
+                .values('month')
+                .annotate(revenue=Sum('row_total'))
+                .order_by('-month')[:6]
+            )
+            stats['monthly'] = [
+                {
+                    'month':   m['month'].strftime('%b %Y') if m['month'] else '',
+                    'revenue': float(m['revenue'] or 0),
+                }
+                for m in monthly_qs
+            ]
 
         return Response(stats)

@@ -193,73 +193,76 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* Revenue summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-        <div className="panel p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-200/60 shrink-0">
-            <Banknote size={22} className="text-white" />
-          </div>
-          <div className="min-w-0">
-            <div className="field-label">Общий доход</div>
-            {statsLoading ? (
-              <div className="h-7 w-36 bg-neutral-100 rounded-lg animate-pulse mt-1" />
-            ) : (
-              <div className="text-2xl font-black tabular text-primary">
-                {formatMoney(stats?.total_revenue ?? 0)}{' '}
-                <span className="text-base font-semibold text-neutral-400">сом</span>
+      {/* Revenue — owner only */}
+      {user?.is_owner && (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
+            <div className="panel p-5 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-200/60 shrink-0">
+                <Banknote size={22} className="text-white" />
               </div>
-            )}
-          </div>
-        </div>
-
-        <div className="panel p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-md shadow-blue-200/60 shrink-0">
-            <CalendarDays size={22} className="text-white" />
-          </div>
-          <div className="min-w-0">
-            <div className="field-label">Доход в этом месяце</div>
-            {statsLoading ? (
-              <div className="h-7 w-36 bg-neutral-100 rounded-lg animate-pulse mt-1" />
-            ) : (
-              <div className="text-2xl font-black tabular text-primary">
-                {formatMoney(stats?.month_revenue ?? 0)}{' '}
-                <span className="text-base font-semibold text-neutral-400">сом</span>
+              <div className="min-w-0">
+                <div className="field-label">Общий доход</div>
+                {statsLoading ? (
+                  <div className="h-7 w-36 bg-neutral-100 rounded-lg animate-pulse mt-1" />
+                ) : (
+                  <div className="text-2xl font-black tabular text-primary">
+                    {formatMoney(stats?.total_revenue ?? 0)}{' '}
+                    <span className="text-base font-semibold text-neutral-400">сом</span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Top clients + Monthly chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="panel p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-primary">Топ клиентов по доходу</h2>
-            <Link to="/clients" className="text-xs text-neutral-400 hover:text-primary transition-colors">
-              Все клиенты →
-            </Link>
-          </div>
-          <TopClients clients={stats?.top_clients} loading={statsLoading} />
-        </div>
-
-        <div className="panel p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-primary">Доход по месяцам</h2>
-            <span className="text-xs text-neutral-400">Последние 6 мес.</span>
-          </div>
-          {statsLoading ? (
-            <div className="h-20 bg-neutral-100 rounded-xl animate-pulse" />
-          ) : (
-            <MonthlyChart data={stats?.monthly} />
-          )}
-          {!statsLoading && (stats?.monthly?.length ?? 0) > 0 && (
-            <div className="mt-3 pt-3 border-t border-neutral-100 flex justify-between text-xs text-neutral-400">
-              <span>Мин: {formatMoney(Math.min(...(stats?.monthly ?? []).map(m => m.revenue)))} с</span>
-              <span>Макс: {formatMoney(Math.max(...(stats?.monthly ?? []).map(m => m.revenue)))} с</span>
             </div>
-          )}
-        </div>
-      </div>
+
+            <div className="panel p-5 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-md shadow-blue-200/60 shrink-0">
+                <CalendarDays size={22} className="text-white" />
+              </div>
+              <div className="min-w-0">
+                <div className="field-label">Доход в этом месяце</div>
+                {statsLoading ? (
+                  <div className="h-7 w-36 bg-neutral-100 rounded-lg animate-pulse mt-1" />
+                ) : (
+                  <div className="text-2xl font-black tabular text-primary">
+                    {formatMoney(stats?.month_revenue ?? 0)}{' '}
+                    <span className="text-base font-semibold text-neutral-400">сом</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="panel p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-bold text-primary">Топ клиентов по доходу</h2>
+                <Link to="/clients" className="text-xs text-neutral-400 hover:text-primary transition-colors">
+                  Все клиенты →
+                </Link>
+              </div>
+              <TopClients clients={stats?.top_clients} loading={statsLoading} />
+            </div>
+
+            <div className="panel p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="font-bold text-primary">Доход по месяцам</h2>
+                <span className="text-xs text-neutral-400">Последние 6 мес.</span>
+              </div>
+              {statsLoading ? (
+                <div className="h-20 bg-neutral-100 rounded-xl animate-pulse" />
+              ) : (
+                <MonthlyChart data={stats?.monthly} />
+              )}
+              {!statsLoading && (stats?.monthly?.length ?? 0) > 0 && (
+                <div className="mt-3 pt-3 border-t border-neutral-100 flex justify-between text-xs text-neutral-400">
+                  <span>Мин: {formatMoney(Math.min(...(stats?.monthly ?? []).map(m => m.revenue)))} с</span>
+                  <span>Макс: {formatMoney(Math.max(...(stats?.monthly ?? []).map(m => m.revenue)))} с</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Filters */}
       {showFilters && (
