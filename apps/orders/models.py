@@ -65,6 +65,8 @@ class Order(models.Model):
     payment_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     payment_receipt = models.FileField(upload_to='receipts/', null=True, blank=True)
     notes = models.TextField(blank=True)
+    supplier_name = models.CharField(max_length=200, blank=True, default='')
+    buyer_name = models.CharField(max_length=200, blank=True, default='')
     pdf_file = models.FileField(upload_to='invoices/', null=True, blank=True)
 
     class Meta:

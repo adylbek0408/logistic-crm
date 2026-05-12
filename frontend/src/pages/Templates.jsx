@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getTemplates, createTemplate, deleteTemplate } from '../api/endpoints'
+import { getTemplates, createTemplate, updateTemplate, deleteTemplate } from '../api/endpoints'
 import { formatDate } from '../utils/format'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -8,11 +8,13 @@ import { Modal } from '../components/ui/Modal'
 import { SkeletonCard } from '../components/ui/Skeleton'
 import { PageHeader } from '../components/ui/PageHeader'
 import useAuthStore from '../store/auth'
-import { LayoutTemplate, Plus, Trash2, Rows3, BookOpen } from 'lucide-react'
+import { LayoutTemplate, Plus, Trash2, Pencil, Rows3, BookOpen } from 'lucide-react'
 
 export function Templates() {
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({ name: '', rows_per_page: 10, pages: 1 })
+  const [editTarget, setEditTarget] = useState(null)
+  const [editForm, setEditForm] = useState({ name: '', rows_per_page: 10, pages: 1 })
   const [confirmDelete, setConfirmDelete] = useState(null)
   const { user } = useAuthStore()
   const qc = useQueryClient()
@@ -31,6 +33,14 @@ export function Templates() {
     },
   })
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => updateTemplate(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries(['templates'])
+      setEditTarget(null)
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: deleteTemplate,
     onSuccess: () => {
@@ -39,8 +49,14 @@ export function Templates() {
     },
   })
 
+  const openEdit = (t) => {
+    setEditForm({ name: t.name, rows_per_page: t.rows_per_page, pages: t.pages })
+    setEditTarget(t)
+  }
+
   const templates = data?.results || data || []
   const totalRows = Number(form.rows_per_page) * Number(form.pages)
+  const editTotalRows = Number(editForm.rows_per_page) * Number(editForm.pages)
 
   return (
     <div className="page-wrap max-w-3xl">
@@ -85,12 +101,22 @@ export function Templates() {
                   </div>
                 </div>
                 {user?.is_owner && (
-                  <button
-                    onClick={() => setConfirmDelete(t)}
-                    className="mobile-tap inline-flex items-center justify-center rounded-xl text-neutral-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => openEdit(t)}
+                      className="mobile-tap inline-flex items-center justify-center w-8 h-8 rounded-xl text-neutral-300 hover:text-primary hover:bg-primary/8 transition-colors"
+                      title="Редактировать"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(t)}
+                      className="mobile-tap inline-flex items-center justify-center w-8 h-8 rounded-xl text-neutral-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      title="Удалить"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -155,6 +181,49 @@ export function Templates() {
             <Button type="button" variant="secondary" onClick={() => setShowAdd(false)}>Отмена</Button>
             <Button type="submit" disabled={createMutation.isLoading}>
               {createMutation.isLoading ? 'Создание...' : 'Создать шаблон'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit modal */}
+      <Modal open={!!editTarget} onClose={() => setEditTarget(null)} title="Редактировать шаблон">
+        <form
+          onSubmit={(e) => { e.preventDefault(); updateMutation.mutate({ id: editTarget.id, data: editForm }) }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="text-sm font-medium text-neutral-700">Название *</label>
+            <input required value={editForm.name}
+              onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+              placeholder="Овощи базар"
+              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-neutral-700">Строк на странице</label>
+              <input type="number" min={1} max={100} value={editForm.rows_per_page}
+                onChange={(e) => setEditForm((f) => ({ ...f, rows_per_page: e.target.value }))}
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-neutral-700">Страниц</label>
+              <input type="number" min={1} max={20} value={editForm.pages}
+                onChange={(e) => setEditForm((f) => ({ ...f, pages: e.target.value }))}
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+          </div>
+          <div className="bg-gradient-to-br from-primary/5 to-primary-500/5 rounded-xl px-4 py-3 flex items-center justify-between">
+            <span className="text-sm text-neutral-600">Итого строк</span>
+            <span className="text-2xl font-black text-primary tabular">{editTotalRows}</span>
+          </div>
+          <div className="flex gap-3 justify-end pt-1">
+            <Button type="button" variant="secondary" onClick={() => setEditTarget(null)}>Отмена</Button>
+            <Button type="submit" disabled={updateMutation.isLoading}>
+              {updateMutation.isLoading ? 'Сохранение...' : 'Сохранить'}
             </Button>
           </div>
         </form>

@@ -76,18 +76,20 @@ def generate_invoice_pdf(order) -> bytes:
     elements.append(Spacer(1, 7 * mm))
 
     # ── Header: Покупатель (СЛЕВА) | Поставщик (СПРАВА) ──
+    buyer_display = order.buyer_name or client.display_name
     buyer_lines = [
         Paragraph('Покупатель:', _ps('bh', 8, bold=True, color=colors.HexColor('#6B7280'))),
-        Paragraph(client.display_name, _ps('bn', 11, bold=True)),
+        Paragraph(buyer_display, _ps('bn', 11, bold=True)),
     ]
-    if client.brand_name:
+    if not order.buyer_name and client.brand_name:
         buyer_lines.append(Paragraph(client.brand_name, _ps('bb', 9)))
     if client.phone:
         buyer_lines.append(Paragraph(f'Тел: {client.phone}', _ps('bp', 8, color=colors.HexColor('#6B7280'))))
 
+    supplier_display = order.supplier_name or 'ИП'
     supplier_lines = [
         Paragraph('Поставщик:', _ps('sh', 8, bold=True, color=colors.HexColor('#6B7280'))),
-        Paragraph('ИП Асылбек', _ps('sn', 11, bold=True)),
+        Paragraph(supplier_display, _ps('sn', 11, bold=True)),
     ]
 
     header_data = [[

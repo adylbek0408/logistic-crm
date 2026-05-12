@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getClient, getClientOrders, getTemplates, createOrder } from '../api/endpoints'
+import { getClient, getClientOrders, getTemplates, createOrder, updateClient, deleteClient } from '../api/endpoints'
 import { formatDate } from '../utils/format'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -11,7 +11,7 @@ import { STATUS_META } from '../utils/status'
 import useAuthStore from '../store/auth'
 import {
   ArrowLeft, Phone, ShoppingBag, CalendarDays, FileText,
-  PackagePlus, ArrowRight, LayoutTemplate, Loader2,
+  PackagePlus, ArrowRight, LayoutTemplate, Loader2, Pencil, Trash2,
 } from 'lucide-react'
 import { initials } from '../utils/format'
 
@@ -34,6 +34,10 @@ export function ClientDetail() {
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState('')
   const [showNewOrder, setShowNewOrder] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
+  const [editForm, setEditForm] = useState({})
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const qc = useQueryClient()
 
   const { data: client, isLoading: clientLoading } = useQuery({
@@ -69,6 +73,35 @@ export function ClientDetail() {
       navigate(`/orders/${res.data.id}`)
     },
   })
+
+  const updateMutation = useMutation({
+    mutationFn: (data) => updateClient(id, data),
+    onSuccess: (res) => {
+      qc.setQueryData(['client', id], res.data)
+      qc.invalidateQueries(['clients'])
+      setShowEdit(false)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteClient(id),
+    onSuccess: () => {
+      qc.invalidateQueries(['clients'])
+      navigate('/clients')
+    },
+    onError: (err) => setDeleteError(err.response?.data?.detail || 'Не удалось удалить клиента'),
+  })
+
+  const openEdit = () => {
+    setEditForm({
+      first_name: client.first_name || '',
+      last_name: client.last_name || '',
+      phone: client.phone || '',
+      brand_name: client.brand_name || '',
+      notes: client.notes || '',
+    })
+    setShowEdit(true)
+  }
 
   const orders = activeTab ? allOrders.filter((o) => o.status === activeTab) : allOrders
   const templateList = templates?.results || templates || []
@@ -132,10 +165,26 @@ export function ClientDetail() {
             )}
           </div>
           {user?.is_owner && (
-            <Button onClick={() => setShowNewOrder(true)} className="shrink-0 w-full sm:w-auto">
-              <PackagePlus size={16} />
-              <span>Новый заказ</span>
-            </Button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button onClick={() => setShowNewOrder(true)} className="flex-1 sm:flex-none">
+                <PackagePlus size={16} />
+                <span>Новый заказ</span>
+              </Button>
+              <button
+                onClick={openEdit}
+                className="mobile-tap inline-flex items-center justify-center w-10 h-10 rounded-xl border border-neutral-200 text-neutral-400 hover:text-primary hover:border-primary hover:bg-primary/5 transition-colors"
+                title="Редактировать"
+              >
+                <Pencil size={15} />
+              </button>
+              <button
+                onClick={() => { setDeleteError(''); setShowDeleteConfirm(true) }}
+                className="mobile-tap inline-flex items-center justify-center w-10 h-10 rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
+                title="Удалить клиента"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -222,6 +271,69 @@ export function ClientDetail() {
           )}
         </div>
       )}
+
+      {/* Edit client modal */}
+      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Редактировать клиента">
+        <form onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(editForm) }} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-neutral-700">Имя *</label>
+              <input required value={editForm.first_name || ''} onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))}
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-neutral-700">Фамилия</label>
+              <input value={editForm.last_name || ''} onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))}
+                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-neutral-700">Телефон</label>
+            <input type="tel" value={editForm.phone || ''} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-neutral-700">Бренд / Магазин</label>
+            <input value={editForm.brand_name || ''} onChange={(e) => setEditForm((f) => ({ ...f, brand_name: e.target.value }))}
+              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-neutral-700">Заметки</label>
+            <textarea value={editForm.notes || ''} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} rows={3}
+              className="mt-1 w-full px-3 py-2 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none" />
+          </div>
+          <div className="flex gap-3 justify-end pt-1">
+            <Button type="button" variant="secondary" onClick={() => setShowEdit(false)}>Отмена</Button>
+            <Button type="submit" disabled={updateMutation.isLoading}>
+              {updateMutation.isLoading ? 'Сохранение...' : 'Сохранить'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Delete confirm modal */}
+      <Modal open={showDeleteConfirm} onClose={() => setShowDeleteConfirm(false)} title="Удалить клиента?">
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            Вы уверены, что хотите удалить клиента{' '}
+            <span className="font-semibold text-primary">{client?.display_name}</span>?
+            Это действие нельзя отменить.
+          </p>
+          {deleteError && (
+            <div className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2">{deleteError}</div>
+          )}
+          <div className="flex gap-3 justify-end">
+            <Button type="button" variant="secondary" onClick={() => setShowDeleteConfirm(false)}>Отмена</Button>
+            <button
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isLoading}
+              className="min-h-touch px-4 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60"
+            >
+              {deleteMutation.isLoading ? 'Удаление...' : 'Удалить'}
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* New order modal */}
       <Modal open={showNewOrder} onClose={() => setShowNewOrder(false)} title="Выберите шаблон">

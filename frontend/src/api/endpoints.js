@@ -15,11 +15,13 @@ export const getClients = (params) => api.get('/api/clients/', { params })
 export const getClient = (id) => api.get(`/api/clients/${id}/`)
 export const createClient = (data) => api.post('/api/clients/', data)
 export const updateClient = (id, data) => api.patch(`/api/clients/${id}/`, data)
+export const deleteClient = (id) => api.delete(`/api/clients/${id}/`)
 export const getClientOrders = (id, params) => api.get(`/api/clients/${id}/orders/`, { params })
 
 // Templates
 export const getTemplates = () => api.get('/api/templates/')
 export const createTemplate = (data) => api.post('/api/templates/', data)
+export const updateTemplate = (id, data) => api.patch(`/api/templates/${id}/`, data)
 export const deleteTemplate = (id) => api.delete(`/api/templates/${id}/`)
 
 // Orders

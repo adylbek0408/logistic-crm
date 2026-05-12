@@ -268,6 +268,8 @@ export function OrderEditor() {
   const [completionForm, setCompletionForm] = useState({
     sent_at: new Date().toISOString().slice(0, 10),
     payment_status: 'unpaid',
+    supplier_name: '',
+    buyer_name: '',
   })
 
   const orderId = id && id !== 'undefined' ? id : null
@@ -292,22 +294,43 @@ export function OrderEditor() {
     setRowStats(init)
   }, [order?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Instant summary — derived from rowStats, no HTTP needed
+  // Pre-fill supplier/buyer from saved order data
+  useEffect(() => {
+    if (!order) return
+    setCompletionForm((f) => ({
+      ...f,
+      supplier_name: order.supplier_name || '',
+      buyer_name: order.buyer_name || '',
+    }))
+  }, [order?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Instant summary — derived from rowStats; falls back to order.rows on first render
   const { doneCount, totalAmount, progress } = useMemo(() => {
     const rows = order?.rows || []
+    const hasStats = Object.keys(rowStats).length > 0
     let done = 0, amount = 0
-    Object.values(rowStats).forEach(({ fulfillment_status, total }) => {
-      if (fulfillment_status === 'done') {
-        done++
-        if (total != null) amount += total
-      }
-    })
+    if (hasStats) {
+      Object.values(rowStats).forEach(({ fulfillment_status, total }) => {
+        if (fulfillment_status === 'done') {
+          done++
+          if (total != null) amount += total
+        }
+      })
+    } else {
+      rows.forEach((r) => {
+        if (r.fulfillment_status === 'done') {
+          done++
+          const t = calcTotal(r.quantity, r.price)
+          if (t != null) amount += t
+        }
+      })
+    }
     return {
       doneCount: done,
       totalAmount: amount,
       progress: rows.length ? Math.round((done / rows.length) * 100) : 0,
     }
-  }, [rowStats, order?.rows?.length])
+  }, [rowStats, order?.rows])
 
   const rowUpdateMutation = useMutation({
     mutationFn: ({ rowId, data }) => updateOrderRow(orderId, rowId, data),
@@ -416,6 +439,8 @@ export function OrderEditor() {
     fd.append('status', 'completed')
     fd.append('payment_status', completionForm.payment_status)
     if (completionForm.sent_at) fd.append('sent_at', completionForm.sent_at)
+    fd.append('supplier_name', completionForm.supplier_name)
+    fd.append('buyer_name', completionForm.buyer_name)
     completeMutation.mutate(fd)
     send({ event: 'order:status', status: 'completed' })
   }
@@ -711,6 +736,25 @@ export function OrderEditor() {
             <div className="text-xs text-white/60 mb-0.5">Сумма по выполненным</div>
             <div className="text-3xl font-black tabular">{formatMoney(totalAmount)} <span className="text-base font-medium opacity-70">сом</span></div>
             <div className="text-xs text-white/50 mt-1">{doneCount} из {rows.length} строк · {progress}%</div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-semibold text-neutral-700 block mb-1.5">Поставщик</label>
+              <input type="text" value={completionForm.supplier_name}
+                onChange={(e) => setCompletionForm((f) => ({ ...f, supplier_name: e.target.value }))}
+                placeholder="ИП"
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-semibold text-neutral-700 block mb-1.5">Покупатель</label>
+              <input type="text" value={completionForm.buyer_name}
+                onChange={(e) => setCompletionForm((f) => ({ ...f, buyer_name: e.target.value }))}
+                placeholder={order?.client_brand || order?.client_name || ''}
+                className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary"
+              />
+            </div>
           </div>
 
           <div>

@@ -27,8 +27,9 @@ class TemplateListCreateView(generics.ListCreateAPIView):
         serializer.save(created_by=self.request.user)
 
 
-class TemplateDeleteView(generics.DestroyAPIView):
-    queryset = Template.objects.all()
+class TemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = Template.objects.select_related('created_by').all()
+    serializer_class = TemplateSerializer
     permission_classes = [IsOwner]
 
 
@@ -109,6 +110,10 @@ class OrderRowUpdateView(APIView):
         serializer = OrderRowUpdateSerializer(row, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         row = serializer.save(updated_by=request.user)
+
+        # Auto-transition: new → in_progress on first row edit
+        if order.status == Order.Status.NEW:
+            Order.objects.filter(pk=pk, status=Order.Status.NEW).update(status=Order.Status.IN_PROGRESS)
 
         from .serializers import OrderRowSerializer
         return Response(OrderRowSerializer(row).data)

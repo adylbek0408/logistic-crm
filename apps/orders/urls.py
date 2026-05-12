@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    TemplateListCreateView, TemplateDeleteView,
+    TemplateListCreateView, TemplateDetailView,
     OrderListCreateView, OrderDetailView,
     OrderRowUpdateView, GeneratePDFView, DownloadPDFView,
     DashboardStatsView,
@@ -8,7 +8,7 @@ from .views import (
 
 urlpatterns = [
     path('templates/', TemplateListCreateView.as_view(), name='template_list'),
-    path('templates/<int:pk>/', TemplateDeleteView.as_view(), name='template_delete'),
+    path('templates/<int:pk>/', TemplateDetailView.as_view(), name='template_detail'),
     path('orders/', OrderListCreateView.as_view(), name='order_list'),
     path('orders/<int:pk>/', OrderDetailView.as_view(), name='order_detail'),
     path('orders/<int:pk>/rows/<int:row_id>/', OrderRowUpdateView.as_view(), name='order_row_update'),

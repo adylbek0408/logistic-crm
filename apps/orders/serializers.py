@@ -49,7 +49,7 @@ class OrderSerializer(serializers.ModelSerializer):
             'template', 'template_name', 'template_rows_per_page', 'template_pages',
             'status', 'created_by_name', 'created_at', 'updated_at', 'sent_at',
             'payment_status', 'payment_amount', 'payment_receipt',
-            'notes', 'pdf_file', 'rows', 'total_amount',
+            'notes', 'supplier_name', 'buyer_name', 'pdf_file', 'rows', 'total_amount',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'pdf_file']
 
@@ -82,7 +82,7 @@ class OrderCreateSerializer(serializers.ModelSerializer):
 class OrderUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
-        fields = ['status', 'sent_at', 'payment_status', 'payment_amount', 'payment_receipt', 'notes']
+        fields = ['status', 'sent_at', 'payment_status', 'payment_amount', 'payment_receipt', 'notes', 'supplier_name', 'buyer_name']
 
 
 class OrderListSerializer(serializers.ModelSerializer):
