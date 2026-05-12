@@ -23,3 +23,13 @@ class UserListCreateView(generics.ListCreateAPIView):
         if self.request.method == 'POST':
             return UserCreateSerializer
         return UserSerializer
+
+
+class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = User.objects.filter(is_active=True)
+    serializer_class = UserSerializer
+    permission_classes = [IsOwner]
+
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save()

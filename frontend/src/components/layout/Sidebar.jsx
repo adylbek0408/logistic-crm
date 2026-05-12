@@ -1,18 +1,21 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, ClipboardList, LayoutTemplate, LogOut, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Users, ClipboardList, LayoutTemplate, LogOut, ChevronRight, UserCog } from 'lucide-react'
 import useAuthStore from '../../store/auth'
 import { Badge } from '../ui/Badge'
 
-const NAV = [
-  { to: '/',         label: 'Дашборд',  icon: LayoutDashboard, end: true },
-  { to: '/clients',  label: 'Клиенты',  icon: Users },
-  { to: '/orders',   label: 'Заказы',   icon: ClipboardList },
-  { to: '/templates',label: 'Шаблоны', icon: LayoutTemplate },
+const NAV_ALL = [
+  { to: '/',          label: 'Дашборд',    icon: LayoutDashboard, end: true },
+  { to: '/clients',   label: 'Клиенты',    icon: Users },
+  { to: '/orders',    label: 'Заказы',     icon: ClipboardList },
+  { to: '/templates', label: 'Шаблоны',   icon: LayoutTemplate },
+  { to: '/users',     label: 'Сотрудники', icon: UserCog, ownerOnly: true },
 ]
 
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+
+  const NAV = NAV_ALL.filter((item) => !item.ownerOnly || user?.is_owner)
 
   const handleLogout = () => { logout(); navigate('/login') }
 

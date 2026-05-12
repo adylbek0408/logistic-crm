@@ -8,6 +8,7 @@ import { ClientDetail } from './pages/ClientDetail'
 import { Orders } from './pages/Orders'
 import { OrderEditor } from './pages/OrderEditor'
 import { Templates } from './pages/Templates'
+import { Users } from './pages/Users'
 import { ToastProvider } from './components/ui/Toast'
 import useAuthStore from './store/auth'
 import { useEffect } from 'react'
@@ -57,6 +58,7 @@ export default function App() {
               <Route path="orders" element={<Orders />} />
               <Route path="orders/:id" element={<OrderEditor />} />
               <Route path="templates" element={<Templates />} />
+              <Route path="users" element={<Users />} />
             </Route>
           </Routes>
         </AuthLoader>

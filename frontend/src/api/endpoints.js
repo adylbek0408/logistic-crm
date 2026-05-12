@@ -4,6 +4,12 @@ import api from './axios'
 export const login = (data) => api.post('/api/auth/login/', data)
 export const getMe = () => api.get('/api/auth/me/')
 
+// Users
+export const getUsers = () => api.get('/api/auth/users/')
+export const createUser = (data) => api.post('/api/auth/users/', data)
+export const updateUser = (id, data) => api.patch(`/api/auth/users/${id}/`, data)
+export const deleteUser = (id) => api.delete(`/api/auth/users/${id}/`)
+
 // Clients
 export const getClients = (params) => api.get('/api/clients/', { params })
 export const getClient = (id) => api.get(`/api/clients/${id}/`)
