@@ -23,7 +23,9 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 
 class MeSerializer(serializers.ModelSerializer):
+    is_owner = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = User
-        fields = ['id', 'username', 'full_name', 'phone', 'role']
-        read_only_fields = ['id', 'username', 'role']
+        fields = ['id', 'username', 'full_name', 'phone', 'role', 'is_owner', 'is_superuser']
+        read_only_fields = ['id', 'username', 'role', 'is_owner', 'is_superuser']

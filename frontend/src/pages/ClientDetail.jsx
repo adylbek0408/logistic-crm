@@ -131,7 +131,7 @@ export function ClientDetail() {
               </div>
             )}
           </div>
-          {user?.role === 'owner' && (
+          {user?.is_owner && (
             <Button onClick={() => setShowNewOrder(true)} className="shrink-0 w-full sm:w-auto">
               <PackagePlus size={16} />
               <span>Новый заказ</span>
@@ -210,7 +210,7 @@ export function ClientDetail() {
                 <FileText size={24} className="text-neutral-400" />
               </div>
               <div className="font-medium text-neutral-500">Нет заказов</div>
-              {user?.role === 'owner' && (
+              {user?.is_owner && (
                 <button
                   onClick={() => setShowNewOrder(true)}
                   className="mt-3 text-sm text-primary underline"

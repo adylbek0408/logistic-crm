@@ -47,7 +47,7 @@ export function Templates() {
       <PageHeader
         title="Шаблоны"
         subtitle={`${templates.length} шаблонов`}
-        actions={user?.role === 'owner' ? (
+        actions={user?.is_owner ? (
           <Button onClick={() => setShowAdd(true)} className="w-full md:w-auto">
             <Plus size={16} />
             Создать
@@ -84,7 +84,7 @@ export function Templates() {
                     <div className="text-xs text-neutral-400">{formatDate(t.created_at)}</div>
                   </div>
                 </div>
-                {user?.role === 'owner' && (
+                {user?.is_owner && (
                   <button
                     onClick={() => setConfirmDelete(t)}
                     className="mobile-tap inline-flex items-center justify-center rounded-xl text-neutral-300 hover:text-red-500 hover:bg-red-50 transition-colors shrink-0"
@@ -103,7 +103,7 @@ export function Templates() {
               </div>
               <div className="font-medium text-neutral-500">Нет шаблонов</div>
               <div className="text-sm text-neutral-400 mt-1">Шаблоны определяют структуру заказа</div>
-              {user?.role === 'owner' && (
+              {user?.is_owner && (
                 <button
                   onClick={() => setShowAdd(true)}
                   className="mt-3 text-sm text-primary underline"

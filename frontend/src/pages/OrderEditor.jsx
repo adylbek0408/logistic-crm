@@ -520,7 +520,7 @@ export function OrderEditor() {
             )}
 
             {/* Status */}
-            {user?.role === 'owner' ? (
+            {user?.is_owner ? (
               <div className="relative">
                 <select
                   value={order.status}
@@ -543,13 +543,13 @@ export function OrderEditor() {
               </span>
             )}
 
-            {user?.role === 'owner' && (
+            {user?.is_owner && (
               <button onClick={() => setShowComplete(true)}
                 className="hidden sm:inline-flex min-h-touch px-3 bg-accent text-white rounded-xl text-xs font-bold hover:bg-amber-500 transition-colors items-center">
                 Завершить
               </button>
             )}
-            {user?.role === 'owner' && (
+            {user?.is_owner && (
               <button onClick={() => setShowComplete(true)}
                 className="sm:hidden mobile-tap inline-flex items-center justify-center rounded-xl bg-accent text-white hover:bg-amber-500 transition-colors"
                 title="Завершить заказ">

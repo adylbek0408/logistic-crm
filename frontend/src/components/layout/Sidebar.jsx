@@ -74,10 +74,10 @@ export function Sidebar() {
               <div className="mt-1">
                 <Badge
                   size="sm"
-                  tone={user?.role === 'owner' ? 'warning' : 'neutral'}
-                  className={user?.role === 'owner' ? '' : 'bg-white/20 text-white/75'}
+                  tone={user?.is_owner ? 'warning' : 'neutral'}
+                  className={user?.is_owner ? '' : 'bg-white/20 text-white/75'}
                 >
-                  {user?.role === 'owner' ? 'Владелец' : 'Сотрудник'}
+                  {user?.is_owner ? 'Владелец' : 'Сотрудник'}
                 </Badge>
               </div>
             </div>

@@ -154,7 +154,7 @@ export function Clients() {
                 <span className="bg-white/25 text-white text-xs px-1.5 rounded-full leading-none py-0.5">!</span>
               )}
             </button>
-            {user?.role === 'owner' && (
+            {user?.is_owner && (
               <Button onClick={() => setShowAdd(true)} className="w-full md:w-auto">
                 <UserPlus size={16} />
                 Добавить
@@ -238,7 +238,7 @@ export function Clients() {
               <div className="font-medium text-neutral-500">
                 {search || hasFilters ? 'Ничего не найдено' : 'Нет клиентов'}
               </div>
-              {!search && !hasFilters && user?.role === 'owner' && (
+              {!search && !hasFilters && user?.is_owner && (
                 <button onClick={() => setShowAdd(true)} className="mt-3 text-sm text-primary underline">
                   Добавить первого клиента
                 </button>
