@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { getOrders } from '../api/endpoints'
+import { getOrders, getOrder } from '../api/endpoints'
 import { formatDate } from '../utils/format'
 import { ClipboardList, Filter } from 'lucide-react'
 import { SkeletonCard } from '../components/ui/Skeleton'
@@ -11,11 +11,21 @@ import { PageHeader } from '../components/ui/PageHeader'
 import { STATUS_META } from '../utils/status'
 
 function OrderCard({ order }) {
+  const qc = useQueryClient()
   const pct = order.rows_count ? Math.round((order.done_count / order.rows_count) * 100) : 0
   const s = STATUS_META[order.status] || STATUS_META.new
+
+  const prefetch = () => qc.prefetchQuery({
+    queryKey: ['order', String(order.id)],
+    queryFn: () => getOrder(order.id).then((r) => r.data),
+    staleTime: 60000,
+  })
+
   return (
     <Link
       to={`/orders/${order.id}`}
+      onMouseEnter={prefetch}
+      onTouchStart={prefetch}
       className="group panel p-4 md:p-5 hover:border-primary/25 transition-all duration-150"
     >
       <div className="flex items-start justify-between gap-3">

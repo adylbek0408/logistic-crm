@@ -52,6 +52,21 @@
   }
 }
 
+/* Prevent iOS Safari from zooming on input focus (requires font-size >= 16px) */
+@media screen and (max-width: 767px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="email"],
+  input[type="search"],
+  input[type="date"],
+  input[type="password"],
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+}
+
 @layer components {
   .panel {
     @apply bg-white border border-neutral-200 rounded-2xl shadow-panel;

@@ -96,24 +96,24 @@ export function Sidebar() {
       </aside>
 
       {/* ── Mobile bottom bar ── */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-neutral-200 z-40 flex safe-bottom min-h-[72px]">
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-neutral-200 z-40 flex safe-bottom" style={{ minHeight: 'calc(64px + env(safe-area-inset-bottom, 0px))' }}>
         {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex-1 flex flex-col items-center justify-center py-2 gap-1 text-[11px] font-medium transition-colors mobile-tap ${
+              `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 font-medium transition-colors min-h-[64px] ${
                 isActive ? 'text-primary' : 'text-neutral-400'
               }`
             }
           >
             {({ isActive }) => (
               <>
-                <div className={`p-2 rounded-xl transition-colors ${isActive ? 'bg-primary/10' : ''}`}>
-                  <Icon size={19} strokeWidth={isActive ? 2.4 : 1.9} />
+                <div className={`p-1.5 rounded-xl transition-colors ${isActive ? 'bg-primary/10' : ''}`}>
+                  <Icon size={20} strokeWidth={isActive ? 2.4 : 1.9} />
                 </div>
-                {label}
+                <span className="text-[10px] leading-tight truncate max-w-full px-1">{label}</span>
               </>
             )}
           </NavLink>

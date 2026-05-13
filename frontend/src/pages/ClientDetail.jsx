@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getClient, getClientOrders, getTemplates, createOrder, updateClient, deleteClient } from '../api/endpoints'
+import { getClient, getClientOrders, getTemplates, createOrder, updateClient, deleteClient, getOrder } from '../api/endpoints'
 import { formatDate } from '../utils/format'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -225,10 +225,17 @@ export function ClientDetail() {
           {orders.map((order) => {
             const pct = order.rows_count ? Math.round((order.done_count / order.rows_count) * 100) : 0
             const s = STATUS_META[order.status] || STATUS_META.new
+            const prefetch = () => qc.prefetchQuery({
+              queryKey: ['order', String(order.id)],
+              queryFn: () => getOrder(order.id).then((r) => r.data),
+              staleTime: 60000,
+            })
             return (
               <Link
                 key={order.id}
                 to={`/orders/${order.id}`}
+                onMouseEnter={prefetch}
+                onTouchStart={prefetch}
                 className="group block panel p-4 hover:border-primary/25 transition-all"
               >
                 <div className="flex items-center justify-between gap-3">

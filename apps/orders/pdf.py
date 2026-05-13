@@ -126,8 +126,8 @@ def generate_invoice_pdf(order) -> bytes:
     elements.append(Spacer(1, 7 * mm))
 
     # ── Data table ──
-    col_headers = ['№', 'Наименование', 'В.П.', 'Заказ', 'Отправлено', 'Ед.', 'Цена', 'Итог']
-    col_widths   = [8*mm, 58*mm, 12*mm, 16*mm, 18*mm, 12*mm, 18*mm, 18*mm]
+    col_headers = ['№', 'Наименование', 'В.П.', 'Отправлено', 'Ед.', 'Цена', 'Итог']
+    col_widths   = [8*mm, 68*mm, 14*mm, 22*mm, 14*mm, 20*mm, 14*mm]
 
     hdr_ps = _ps('hdr', 8, bold=True, color=colors.white, align=TA_CENTER)
     table_data = [[Paragraph(h, hdr_ps) for h in col_headers]]
@@ -153,23 +153,30 @@ def generate_invoice_pdf(order) -> bytes:
         unit_map = {'kg': 'кг', 'pcs': 'шт', 'pack': 'пач', 'box': 'уп'}
         unit_str = unit_map.get(row.unit, row.unit)
 
+        status_map = {
+            'done':   ('+', colors.HexColor('#10B981')),
+            'failed': ('-', colors.HexColor('#F43F5E')),
+            'empty':  ('',  colors.HexColor('#9CA3AF')),
+        }
+        vp_char, vp_color = status_map.get(row.fulfillment_status, ('', colors.HexColor('#9CA3AF')))
+        vp_ps = _ps(f'vp{row.pk}', 9, bold=True, color=vp_color, align=TA_CENTER)
+
         table_data.append([
             Paragraph(str(row.row_number), _ps(f'n{row.pk}', 8, align=TA_CENTER)),
             Paragraph(row.item_name or '', cell),
-            Paragraph('', cell),
-            Paragraph(qty_str,  cell_r),
+            Paragraph(vp_char, vp_ps),
             Paragraph(qty_str if is_done else '', cell_r),
             Paragraph(unit_str, cell),
             Paragraph(price_str, cell_r),
             Paragraph(total_str, cell_r),
         ])
 
-    # Total row
+    # Total row (7 columns)
     tot_ps = _ps('tot', 9, bold=True, align=TA_RIGHT)
     table_data.append([
         Paragraph('', tot_ps),
         Paragraph('ИТОГО:', _ps('totl', 9, bold=True)),
-        Paragraph('', tot_ps), Paragraph('', tot_ps), Paragraph('', tot_ps),
+        Paragraph('', tot_ps), Paragraph('', tot_ps),
         Paragraph('', tot_ps), Paragraph('', tot_ps),
         Paragraph(f'{grand_total:.2f}', tot_ps),
     ])

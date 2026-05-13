@@ -701,7 +701,7 @@ export function OrderEditor() {
       </div>
 
       {/* ── Mobile cards ── */}
-      <div className="md:hidden p-3 space-y-2 pb-24">
+      <div className="md:hidden p-3 space-y-2" style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom, 0px))' }}>
         {displayRows.map((row) => (
           <MobileRow
             key={row.id} row={row}
