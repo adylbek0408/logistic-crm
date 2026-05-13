@@ -198,7 +198,7 @@ export function ClientDetail() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex-1 min-w-[102px] min-h-touch flex items-center justify-center gap-1.5 py-2 px-2 rounded-xl text-sm font-medium transition-all ${
+              className={`shrink-0 min-h-touch flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
                 active ? 'bg-white text-primary shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
               }`}
             >

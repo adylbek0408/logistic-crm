@@ -182,7 +182,7 @@ export function Clients() {
           <button
             key={tab.key}
             onClick={() => setOrderStatus(tab.key)}
-            className={`flex-1 min-w-[92px] min-h-touch py-2 px-3 rounded-xl text-sm font-medium transition-all ${
+            className={`shrink-0 min-h-touch py-2 px-3.5 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
               orderStatus === tab.key
                 ? 'bg-white text-primary shadow-sm'
                 : 'text-neutral-500 hover:text-neutral-700'

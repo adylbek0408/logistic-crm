@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Eye, EyeOff } from 'lucide-react'
 import { login, getMe } from '../api/endpoints'
 import useAuthStore from '../store/auth'
 import { Button } from '../components/ui/Button'
@@ -9,6 +10,7 @@ export function Login() {
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPass, setShowPass] = useState(false)
   const { login: storeLogin } = useAuthStore()
   const navigate = useNavigate()
 
@@ -51,15 +53,28 @@ export function Login() {
               autoComplete="username"
               required
             />
-            <Input
-              label="Пароль"
-              type="password"
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-neutral-700">Пароль</label>
+              <div className="relative">
+                <input
+                  type={showPass ? 'text' : 'password'}
+                  value={form.password}
+                  onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                  className="w-full min-h-touch px-3 pr-11 rounded-xl border border-neutral-200 bg-white text-sm transition-colors outline-none hover:border-neutral-300 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 transition-colors p-1"
+                  tabIndex={-1}
+                >
+                  {showPass ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
+              </div>
+            </div>
             {error && (
               <div className="bg-red-50 border border-red-100 text-danger text-sm rounded-xl px-4 py-2.5">
                 {error}

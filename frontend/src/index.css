@@ -73,7 +73,11 @@
   }
 
   .page-wrap {
-    @apply p-4 md:p-6 max-w-7xl mx-auto space-y-4;
+    @apply px-4 pb-4 md:px-6 md:pb-6 max-w-7xl mx-auto space-y-4;
+    padding-top: max(1rem, env(safe-area-inset-top, 0px));
+  }
+  @media (min-width: 768px) {
+    .page-wrap { padding-top: 1.5rem; }
   }
 
   .field-label {
