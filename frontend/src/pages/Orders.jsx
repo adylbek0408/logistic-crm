@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { getOrders, getOrder } from '../api/endpoints'
+import { getOrders, getOrder, getClients } from '../api/endpoints'
 import { formatDate } from '../utils/format'
 import { ClipboardList, Filter } from 'lucide-react'
 import { SkeletonCard } from '../components/ui/Skeleton'
@@ -60,14 +60,27 @@ function OrderCard({ order }) {
 
       <div className="mt-3 flex items-center justify-between">
         <span className="text-xs text-neutral-400">{formatDate(order.created_at)}</span>
-        <span className="text-xs text-neutral-500">{order.done_count} из {order.rows_count} строк</span>
+        <div className="flex items-center gap-2">
+          {order.status === 'completed' && (
+            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              order.payment_status === 'paid'
+                ? 'bg-emerald-50 text-emerald-600'
+                : 'bg-rose-50 text-rose-500'
+            }`}>
+              {order.payment_status === 'paid' ? 'Оплачен' : 'Не оплачен'}
+            </span>
+          )}
+          <span className="text-xs text-neutral-500">{order.done_count} из {order.rows_count} строк</span>
+        </div>
       </div>
     </Link>
   )
 }
 
+const EMPTY_FILTERS = { status: '', payment_status: '', client: '', date_from: '', date_to: '' }
+
 export function Orders() {
-  const [filters, setFilters] = useState({ status: '', date_from: '', date_to: '' })
+  const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [showFilters, setShowFilters] = useState(false)
 
   const { data, isLoading } = useQuery({
@@ -75,6 +88,13 @@ export function Orders() {
     queryFn: () => getOrders(filters).then((r) => r.data),
     keepPreviousData: true,
   })
+
+  const { data: clientsData } = useQuery({
+    queryKey: ['clients', {}],
+    queryFn: () => getClients({}).then((r) => r.data),
+    staleTime: 60000,
+  })
+  const clientsList = clientsData?.results || clientsData || []
 
   const orders = data?.results || data || []
   const activeFilters = Object.values(filters).filter(Boolean).length
@@ -104,33 +124,58 @@ export function Orders() {
 
       <FilterBar
         open={showFilters}
-        onReset={() => setFilters({ status: '', date_from: '', date_to: '' })}
+        onReset={() => setFilters(EMPTY_FILTERS)}
       >
-          <div className="w-full sm:w-auto">
-            <label className="field-label">Статус</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-              className="crm-control w-full sm:min-w-[170px]"
-            >
-              <option value="">Все статусы</option>
-              <option value="new">Новый</option>
-              <option value="in_progress">В процессе</option>
-              <option value="completed">Завершён</option>
-            </select>
-          </div>
-          <div className="w-full sm:w-auto">
-            <label className="field-label">С</label>
-            <input type="date" value={filters.date_from}
-              onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
-              className="crm-control w-full" />
-          </div>
-          <div className="w-full sm:w-auto">
-            <label className="field-label">По</label>
-            <input type="date" value={filters.date_to}
-              onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
-              className="crm-control w-full" />
-          </div>
+        <div className="w-full sm:w-auto">
+          <label className="field-label">Клиент</label>
+          <select
+            value={filters.client}
+            onChange={(e) => setFilters((f) => ({ ...f, client: e.target.value }))}
+            className="crm-control w-full sm:min-w-[200px]"
+          >
+            <option value="">Все клиенты</option>
+            {clientsList.map((c) => (
+              <option key={c.id} value={c.id}>{c.display_name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="field-label">Статус</label>
+          <select
+            value={filters.status}
+            onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
+            className="crm-control w-full sm:min-w-[170px]"
+          >
+            <option value="">Все статусы</option>
+            <option value="new">Новый</option>
+            <option value="in_progress">В процессе</option>
+            <option value="completed">Завершён</option>
+          </select>
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="field-label">Оплата</label>
+          <select
+            value={filters.payment_status}
+            onChange={(e) => setFilters((f) => ({ ...f, payment_status: e.target.value }))}
+            className="crm-control w-full sm:min-w-[160px]"
+          >
+            <option value="">Все</option>
+            <option value="paid">Оплачен</option>
+            <option value="unpaid">Не оплачен</option>
+          </select>
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="field-label">С</label>
+          <input type="date" value={filters.date_from}
+            onChange={(e) => setFilters((f) => ({ ...f, date_from: e.target.value }))}
+            className="crm-control w-full" />
+        </div>
+        <div className="w-full sm:w-auto">
+          <label className="field-label">По</label>
+          <input type="date" value={filters.date_to}
+            onChange={(e) => setFilters((f) => ({ ...f, date_to: e.target.value }))}
+            className="crm-control w-full" />
+        </div>
       </FilterBar>
 
       {isLoading ? (

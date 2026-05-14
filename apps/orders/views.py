@@ -61,6 +61,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
         if date_to:
             qs = qs.filter(created_at__date__lte=date_to)
 
+        payment_status = self.request.query_params.get('payment_status')
+        if payment_status:
+            qs = qs.filter(payment_status=payment_status)
+
         return qs
 
     def get_serializer_class(self):
