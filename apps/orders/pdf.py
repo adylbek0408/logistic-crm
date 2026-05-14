@@ -86,7 +86,7 @@ def generate_invoice_pdf(order) -> bytes:
     if client.phone:
         buyer_lines.append(Paragraph(f'Тел: {client.phone}', _ps('bp', 8, color=colors.HexColor('#6B7280'))))
 
-    supplier_display = order.supplier_name or 'ИП'
+    supplier_display = order.supplier_name or 'Асылбек'
     supplier_lines = [
         Paragraph('Поставщик:', _ps('sh', 8, bold=True, color=colors.HexColor('#6B7280'))),
         Paragraph(supplier_display, _ps('sn', 11, bold=True)),
