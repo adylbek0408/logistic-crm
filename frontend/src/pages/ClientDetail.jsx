@@ -239,11 +239,20 @@ export function ClientDetail() {
                 className="group block panel p-4 hover:border-primary/25 transition-all"
               >
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded-lg">#{order.id}</span>
                     <StatusPill status={order.status} />
+                    {order.status === 'completed' && (
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                        order.payment_status === 'paid'
+                          ? 'bg-emerald-50 text-emerald-600'
+                          : 'bg-rose-50 text-rose-500'
+                      }`}>
+                        {order.payment_status === 'paid' ? 'Оплачен' : 'Не оплачен'}
+                      </span>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs text-neutral-400">{formatDate(order.created_at)}</span>
                     <ArrowRight size={14} className="text-neutral-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                   </div>
