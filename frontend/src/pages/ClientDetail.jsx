@@ -103,13 +103,7 @@ export function ClientDetail() {
   })
 
   const openEdit = () => {
-    setEditForm({
-      first_name: client.first_name || '',
-      last_name: client.last_name || '',
-      phone: client.phone || '',
-      brand_name: client.brand_name || '',
-      notes: client.notes || '',
-    })
+    setEditForm({ brand_name: client.brand_name || '' })
     setShowEdit(true)
   }
 
@@ -311,32 +305,10 @@ export function ClientDetail() {
       {/* Edit client modal */}
       <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Редактировать клиента">
         <form onSubmit={(e) => { e.preventDefault(); updateMutation.mutate(editForm) }} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-sm font-medium text-neutral-700">Имя *</label>
-              <input required value={editForm.first_name || ''} onChange={(e) => setEditForm((f) => ({ ...f, first_name: e.target.value }))}
-                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-neutral-700">Фамилия</label>
-              <input value={editForm.last_name || ''} onChange={(e) => setEditForm((f) => ({ ...f, last_name: e.target.value }))}
-                className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-            </div>
-          </div>
-          <div>
-            <label className="text-sm font-medium text-neutral-700">Телефон</label>
-            <input type="tel" value={editForm.phone || ''} onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
-              className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </div>
           <div>
             <label className="text-sm font-medium text-neutral-700">Бренд / Магазин</label>
             <input value={editForm.brand_name || ''} onChange={(e) => setEditForm((f) => ({ ...f, brand_name: e.target.value }))}
               className="mt-1 w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-neutral-700">Заметки</label>
-            <textarea value={editForm.notes || ''} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} rows={3}
-              className="mt-1 w-full px-3 py-2 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 resize-none" />
           </div>
           <div className="flex gap-3 justify-end pt-1">
             <Button type="button" variant="secondary" onClick={() => setShowEdit(false)}>Отмена</Button>
