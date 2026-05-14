@@ -66,7 +66,7 @@ function ClientCard({ client, index }) {
 }
 
 function AddClientForm({ onClose }) {
-  const [form, setForm] = useState({ first_name: '', last_name: '', phone: '', brand_name: '', notes: '' })
+  const [form, setForm] = useState({ brand_name: '' })
   const [errors, setErrors] = useState({})
   const qc = useQueryClient()
 
@@ -80,17 +80,7 @@ function AddClientForm({ onClose }) {
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(form) }} className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <Input label="Имя *" value={form.first_name} onChange={set('first_name')} error={errors.first_name?.[0]} required placeholder="Айгуль" />
-        <Input label="Фамилия" value={form.last_name} onChange={set('last_name')} placeholder="Иванова" />
-      </div>
-      <Input label="Телефон" value={form.phone} onChange={set('phone')} type="tel" placeholder="+996 700 000 000" />
-      <Input label="Бренд / Магазин" value={form.brand_name} onChange={set('brand_name')} placeholder="Магазин Айгуль" />
-      <div>
-        <label className="text-sm font-medium text-neutral-700">Заметки</label>
-        <textarea value={form.notes} onChange={set('notes')} rows={3}
-          className="mt-1 w-full px-3 py-2 rounded-xl border border-neutral-200 text-sm outline-none hover:border-neutral-300 focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/20 resize-none" />
-      </div>
+      <Input label="Бренд / Магазин *" value={form.brand_name} onChange={set('brand_name')} error={errors.brand_name?.[0]} required placeholder="Магазин Айгуль" />
       <div className="flex flex-col-reverse sm:flex-row gap-3 justify-end pt-2">
         <Button type="button" variant="secondary" onClick={onClose}>Отмена</Button>
         <Button type="submit" disabled={mutation.isLoading}>
