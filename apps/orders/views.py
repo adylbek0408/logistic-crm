@@ -76,12 +76,12 @@ class OrderListCreateView(generics.ListCreateAPIView):
         serializer.save(created_by=self.request.user)
 
 
-class OrderDetailView(generics.RetrieveUpdateAPIView):
+class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.select_related('client', 'template', 'created_by').prefetch_related('rows__updated_by')
 
     def get_permissions(self):
-        if self.request.method in ('PUT', 'PATCH'):
-            return [permissions.IsAuthenticated()]
+        if self.request.method == 'DELETE':
+            return [IsOwner()]
         return [permissions.IsAuthenticated()]
 
     def get_serializer_class(self):

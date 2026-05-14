@@ -31,6 +31,7 @@ export const createOrder = (data) => api.post('/api/orders/', data)
 export const updateOrder = (id, data) => api.patch(`/api/orders/${id}/`, data, {
   headers: data instanceof FormData ? { 'Content-Type': 'multipart/form-data' } : {}
 })
+export const deleteOrder = (id) => api.delete(`/api/orders/${id}/`)
 export const updateOrderRow = (orderId, rowId, data) =>
   api.patch(`/api/orders/${orderId}/rows/${rowId}/`, data)
 export const generatePdf = (id) => api.post(`/api/orders/${id}/generate-pdf/`)

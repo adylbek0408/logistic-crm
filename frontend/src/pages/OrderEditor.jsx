@@ -3,9 +3,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, FileDown, CheckCircle2, XCircle, Circle,
-  ChevronDown, Loader2, ChevronLeft, ChevronRight, Search, X,
+  ChevronDown, Loader2, ChevronLeft, ChevronRight, Search, X, Trash2,
 } from 'lucide-react'
-import { getOrder, updateOrder, updateOrderRow, downloadPdf } from '../api/endpoints'
+import { getOrder, updateOrder, updateOrderRow, downloadPdf, deleteOrder } from '../api/endpoints'
 import { useOrderWebSocket } from '../hooks/useWebSocket'
 import { formatDate, formatMoney, initials } from '../utils/format'
 import { Modal } from '../components/ui/Modal'
@@ -257,6 +257,7 @@ export function OrderEditor() {
   const [locks, setLocks]             = useState({})
   const [flashRows, setFlashRows]     = useState({})
   const [showComplete, setShowComplete] = useState(false)
+  const [showDeleteOrder, setShowDeleteOrder] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch]   = useState(false)
@@ -348,6 +349,15 @@ export function OrderEditor() {
     onSuccess: () => {
       qc.setQueryData(['order', orderId], (old) => old ? { ...old, status: 'completed' } : old)
       setShowComplete(false)
+    },
+  })
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: () => deleteOrder(orderId),
+    onSuccess: () => {
+      qc.invalidateQueries(['orders'])
+      qc.invalidateQueries(['client-orders', String(order?.client)])
+      navigate(`/clients/${order?.client}`)
     },
   })
 
@@ -588,6 +598,16 @@ export function OrderEditor() {
               <span className="hidden sm:inline">PDF</span>
             </button>
 
+            {user?.is_owner && (
+              <button
+                onClick={() => setShowDeleteOrder(true)}
+                className="mobile-tap inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
+                title="Удалить заказ"
+              >
+                <Trash2 size={15} />
+              </button>
+            )}
+
             {/* Search — desktop inline, mobile toggle */}
             <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-neutral-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 bg-white transition-all w-44">
               <Search size={13} className="text-neutral-400 shrink-0" />
@@ -728,6 +748,35 @@ export function OrderEditor() {
           <div className="text-xs text-white/50 mt-1">{doneCount} из {rows.length} строк · {progress}%</div>
         </div>
       </div>
+
+      {/* ── Delete Order Modal ── */}
+      <Modal open={showDeleteOrder} onClose={() => setShowDeleteOrder(false)} title="Удалить заказ?">
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            Вы уверены, что хотите удалить заказ{' '}
+            <span className="font-semibold text-primary">#{order?.id}</span>{' '}
+            клиента{' '}
+            <span className="font-semibold text-primary">{order?.client_brand || order?.client_name}</span>?{' '}
+            Это действие нельзя отменить.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={() => setShowDeleteOrder(false)}
+              className="min-h-touch px-4 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-600 hover:bg-neutral-50 transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              onClick={() => deleteOrderMutation.mutate()}
+              disabled={deleteOrderMutation.isLoading}
+              className="min-h-touch px-4 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60 flex items-center gap-2"
+            >
+              {deleteOrderMutation.isLoading && <Loader2 size={13} className="animate-spin" />}
+              Удалить
+            </button>
+          </div>
+        </div>
+      </Modal>
 
       {/* ── Completion Modal ── */}
       <Modal open={showComplete} onClose={() => setShowComplete(false)} title="Завершение заказа" size="sm">

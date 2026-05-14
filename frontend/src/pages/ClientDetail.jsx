@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getClient, getClientOrders, getTemplates, createOrder, updateClient, deleteClient, getOrder } from '../api/endpoints'
+import { getClient, getClientOrders, getTemplates, createOrder, updateClient, deleteClient, deleteOrder, getOrder } from '../api/endpoints'
 import { formatDate } from '../utils/format'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -38,6 +38,7 @@ export function ClientDetail() {
   const [editForm, setEditForm] = useState({})
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [deleteOrderTarget, setDeleteOrderTarget] = useState(null)
   const qc = useQueryClient()
 
   const { data: client, isLoading: clientLoading } = useQuery({
@@ -90,6 +91,15 @@ export function ClientDetail() {
       navigate('/clients')
     },
     onError: (err) => setDeleteError(err.response?.data?.detail || 'Не удалось удалить клиента'),
+  })
+
+  const deleteOrderMutation = useMutation({
+    mutationFn: (orderId) => deleteOrder(orderId),
+    onSuccess: () => {
+      qc.invalidateQueries(['client-orders', id])
+      qc.invalidateQueries(['client', id])
+      setDeleteOrderTarget(null)
+    },
   })
 
   const openEdit = () => {
@@ -231,42 +241,52 @@ export function ClientDetail() {
               staleTime: 60000,
             })
             return (
-              <Link
-                key={order.id}
-                to={`/orders/${order.id}`}
-                onMouseEnter={prefetch}
-                onTouchStart={prefetch}
-                className="group block panel p-4 hover:border-primary/25 transition-all"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded-lg">#{order.id}</span>
-                    <StatusPill status={order.status} />
-                    {order.status === 'completed' && (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        order.payment_status === 'paid'
-                          ? 'bg-emerald-50 text-emerald-600'
-                          : 'bg-rose-50 text-rose-500'
-                      }`}>
-                        {order.payment_status === 'paid' ? 'Оплачен' : 'Не оплачен'}
-                      </span>
-                    )}
+              <div key={order.id} className="relative group">
+                <Link
+                  to={`/orders/${order.id}`}
+                  onMouseEnter={prefetch}
+                  onTouchStart={prefetch}
+                  className="group block panel p-4 hover:border-primary/25 transition-all"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs text-neutral-500 bg-neutral-100 px-2 py-1 rounded-lg">#{order.id}</span>
+                      <StatusPill status={order.status} />
+                      {order.status === 'completed' && (
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                          order.payment_status === 'paid'
+                            ? 'bg-emerald-50 text-emerald-600'
+                            : 'bg-rose-50 text-rose-500'
+                        }`}>
+                          {order.payment_status === 'paid' ? 'Оплачен' : 'Не оплачен'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-neutral-400">{formatDate(order.created_at)}</span>
+                      <ArrowRight size={14} className="text-neutral-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs text-neutral-400">{formatDate(order.created_at)}</span>
-                    <ArrowRight size={14} className="text-neutral-300 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                  <div className="mt-3 flex items-center gap-2">
+                    <div className="flex-1 bg-neutral-100 rounded-full h-1.5">
+                      <div
+                        className={`h-1.5 rounded-full transition-all ${s.progress}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <span className="text-xs text-neutral-400 tabular">{order.done_count}/{order.rows_count}</span>
                   </div>
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="flex-1 bg-neutral-100 rounded-full h-1.5">
-                    <div
-                      className={`h-1.5 rounded-full transition-all ${s.progress}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-xs text-neutral-400 tabular">{order.done_count}/{order.rows_count}</span>
-                </div>
-              </Link>
+                </Link>
+                {user?.is_owner && (
+                  <button
+                    onClick={(e) => { e.preventDefault(); setDeleteOrderTarget(order) }}
+                    className="absolute top-3 right-10 opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-red-500 hover:bg-red-50"
+                    title="Удалить заказ"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
             )
           })}
           {orders.length === 0 && (
@@ -346,6 +366,27 @@ export function ClientDetail() {
               className="min-h-touch px-4 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60"
             >
               {deleteMutation.isLoading ? 'Удаление...' : 'Удалить'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete order confirm modal */}
+      <Modal open={!!deleteOrderTarget} onClose={() => setDeleteOrderTarget(null)} title="Удалить заказ?">
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            Вы уверены, что хотите удалить заказ{' '}
+            <span className="font-semibold text-primary">#{deleteOrderTarget?.id}</span>?{' '}
+            Это действие нельзя отменить.
+          </p>
+          <div className="flex gap-3 justify-end">
+            <Button type="button" variant="secondary" onClick={() => setDeleteOrderTarget(null)}>Отмена</Button>
+            <button
+              onClick={() => deleteOrderMutation.mutate(deleteOrderTarget.id)}
+              disabled={deleteOrderMutation.isLoading}
+              className="min-h-touch px-4 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600 transition-colors disabled:opacity-60"
+            >
+              {deleteOrderMutation.isLoading ? 'Удаление...' : 'Удалить'}
             </button>
           </div>
         </div>
