@@ -1,7 +1,6 @@
-from rest_framework import generics, permissions, filters, status
+from rest_framework import generics, permissions, filters
 from rest_framework.response import Response
 from django.db.models import Count, Q
-from django.db.models import ProtectedError
 from .models import Client
 from .serializers import ClientSerializer, ClientListSerializer
 from apps.accounts.permissions import IsOwnerOrReadOnly
@@ -42,16 +41,6 @@ class ClientDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ClientSerializer
     permission_classes = [IsOwnerOrReadOnly]
 
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-        try:
-            self.perform_destroy(instance)
-        except ProtectedError:
-            return Response(
-                {'detail': 'Нельзя удалить клиента — есть связанные заказы.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ClientOrdersView(generics.ListAPIView):

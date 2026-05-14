@@ -39,7 +39,7 @@ class Order(models.Model):
         PAID = 'paid', 'Оплачен'
         UNPAID = 'unpaid', 'Не оплачен'
 
-    client = models.ForeignKey(Client, on_delete=models.PROTECT, related_name='orders')
+    client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='orders')
     template = models.ForeignKey(
         Template,
         on_delete=models.SET_NULL,
