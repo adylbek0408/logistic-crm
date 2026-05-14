@@ -144,12 +144,10 @@ export function Clients() {
                 <span className="bg-white/25 text-white text-xs px-1.5 rounded-full leading-none py-0.5">!</span>
               )}
             </button>
-            {user?.is_owner && (
-              <Button onClick={() => setShowAdd(true)} className="w-full md:w-auto">
-                <UserPlus size={16} />
-                Добавить
-              </Button>
-            )}
+            <Button onClick={() => setShowAdd(true)} className="w-full md:w-auto">
+              <UserPlus size={16} />
+              Добавить
+            </Button>
           </div>
         }
       />

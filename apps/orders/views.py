@@ -35,8 +35,6 @@ class TemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class OrderListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
-        if self.request.method == 'POST':
-            return [IsOwner()]
         return [permissions.IsAuthenticated()]
 
     def get_queryset(self):

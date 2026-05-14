@@ -202,19 +202,6 @@ def generate_invoice_pdf(order) -> bytes:
     elements.append(main_table)
     elements.append(Spacer(1, 8 * mm))
 
-    # ── Payment stamp ──
-    paid = order.payment_status == 'paid'
-    stamp_color = colors.HexColor('#10B981') if paid else colors.HexColor('#F43F5E')
-    elements.append(Paragraph(
-        'ОПЛАЧЕНО' if paid else 'НЕ ОПЛАЧЕНО',
-        _ps('stamp', 22, bold=True, color=stamp_color, align=TA_RIGHT),
-    ))
-    if order.payment_amount:
-        elements.append(Paragraph(
-            f'Сумма: {order.payment_amount} сом',
-            _ps('pay', 9, align=TA_RIGHT, color=colors.HexColor('#6B7280')),
-        ))
-
     def _footer(canvas, doc):
         canvas.saveState()
         canvas.setFont(_FONT, 8)

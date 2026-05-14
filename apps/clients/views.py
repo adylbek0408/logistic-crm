@@ -3,11 +3,11 @@ from rest_framework.response import Response
 from django.db.models import Count, Q
 from .models import Client
 from .serializers import ClientSerializer, ClientListSerializer
-from apps.accounts.permissions import IsOwnerOrReadOnly
+from apps.accounts.permissions import IsOwner, IsOwnerOrReadOnly
 
 
 class ClientListCreateView(generics.ListCreateAPIView):
-    permission_classes = [IsOwnerOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter]
     search_fields = ['first_name', 'last_name', 'brand_name', 'phone']
 
@@ -39,7 +39,11 @@ class ClientListCreateView(generics.ListCreateAPIView):
 class ClientDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
-    permission_classes = [IsOwnerOrReadOnly]
+
+    def get_permissions(self):
+        if self.request.method in ('PUT', 'PATCH', 'DELETE'):
+            return [IsOwner()]
+        return [permissions.IsAuthenticated()]
 
 
 

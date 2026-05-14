@@ -11,7 +11,7 @@ import { STATUS_META } from '../utils/status'
 import useAuthStore from '../store/auth'
 import {
   ArrowLeft, Phone, ShoppingBag, CalendarDays, FileText,
-  PackagePlus, ArrowRight, LayoutTemplate, Loader2, Pencil, Trash2,
+  PackagePlus, ArrowRight, LayoutTemplate, Loader2, Pencil, Trash2, SlidersHorizontal,
 } from 'lucide-react'
 import { initials } from '../utils/format'
 
@@ -39,6 +39,9 @@ export function ClientDetail() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [deleteOrderTarget, setDeleteOrderTarget] = useState(null)
+  const [showDateFilter, setShowDateFilter] = useState(false)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const qc = useQueryClient()
 
   const { data: client, isLoading: clientLoading } = useQuery({
@@ -107,7 +110,12 @@ export function ClientDetail() {
     setShowEdit(true)
   }
 
-  const orders = activeTab ? allOrders.filter((o) => o.status === activeTab) : allOrders
+  const orders = allOrders.filter((o) => {
+    if (activeTab && o.status !== activeTab) return false
+    if (dateFrom && o.created_at.slice(0, 10) < dateFrom) return false
+    if (dateTo && o.created_at.slice(0, 10) > dateTo) return false
+    return true
+  })
   const templateList = templates?.results || templates || []
   const grad = AVATAR_COLORS[(Number(id) || 0) % AVATAR_COLORS.length]
 
@@ -168,56 +176,91 @@ export function ClientDetail() {
               </div>
             )}
           </div>
-          {user?.is_owner && (
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Button onClick={() => setShowNewOrder(true)} className="flex-1 sm:flex-none">
-                <PackagePlus size={16} />
-                <span>Новый заказ</span>
-              </Button>
-              <button
-                onClick={openEdit}
-                className="mobile-tap inline-flex items-center justify-center w-10 h-10 rounded-xl border border-neutral-200 text-neutral-400 hover:text-primary hover:border-primary hover:bg-primary/5 transition-colors"
-                title="Редактировать"
-              >
-                <Pencil size={15} />
-              </button>
-              <button
-                onClick={() => { setDeleteError(''); setShowDeleteConfirm(true) }}
-                className="mobile-tap inline-flex items-center justify-center w-10 h-10 rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
-                title="Удалить клиента"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          )}
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button onClick={() => setShowNewOrder(true)} className="flex-1 sm:flex-none">
+              <PackagePlus size={16} />
+              <span>Новый заказ</span>
+            </Button>
+            {user?.is_owner && (
+              <>
+                <button
+                  onClick={openEdit}
+                  className="mobile-tap inline-flex items-center justify-center w-10 h-10 rounded-xl border border-neutral-200 text-neutral-400 hover:text-primary hover:border-primary hover:bg-primary/5 transition-colors"
+                  title="Редактировать"
+                >
+                  <Pencil size={15} />
+                </button>
+                <button
+                  onClick={() => { setDeleteError(''); setShowDeleteConfirm(true) }}
+                  className="mobile-tap inline-flex items-center justify-center w-10 h-10 rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
+                  title="Удалить клиента"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-neutral-100 rounded-2xl p-1 overflow-x-auto scrollbar-hide">
-        {TABS.map((tab) => {
-          const count = counts[tab.key]
-          const active = activeTab === tab.key
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`shrink-0 min-h-touch flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
-                active ? 'bg-white text-primary shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
-              }`}
-            >
-              <span>{tab.label}</span>
-              {count > 0 && (
-                <span className={`text-xs rounded-full px-1.5 py-0.5 leading-none tabular ${
-                  active ? 'bg-primary/10 text-primary' : 'bg-neutral-200 text-neutral-500'
-                }`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          )
-        })}
+      {/* Tabs + date filter toggle */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex gap-1 bg-neutral-100 rounded-2xl p-1 overflow-x-auto scrollbar-hide">
+          {TABS.map((tab) => {
+            const count = counts[tab.key]
+            const active = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`shrink-0 min-h-touch flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${
+                  active ? 'bg-white text-primary shadow-sm' : 'text-neutral-500 hover:text-neutral-700'
+                }`}
+              >
+                <span>{tab.label}</span>
+                {count > 0 && (
+                  <span className={`text-xs rounded-full px-1.5 py-0.5 leading-none tabular ${
+                    active ? 'bg-primary/10 text-primary' : 'bg-neutral-200 text-neutral-500'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+        <button
+          onClick={() => { setShowDateFilter(v => !v); if (showDateFilter) { setDateFrom(''); setDateTo('') } }}
+          className={`shrink-0 inline-flex items-center justify-center w-10 h-10 rounded-xl border transition-colors ${
+            (showDateFilter || dateFrom || dateTo) ? 'border-primary text-primary bg-primary/5' : 'border-neutral-200 text-neutral-400 hover:border-neutral-300'
+          }`}
+          title="Фильтр по дате"
+        >
+          <SlidersHorizontal size={15} />
+        </button>
       </div>
+
+      {/* Date filter panel */}
+      {showDateFilter && (
+        <div className="panel p-3 flex flex-wrap items-end gap-3">
+          <div className="flex-1 min-w-[130px]">
+            <label className="field-label">С даты</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}
+              className="mt-1 crm-control w-full" />
+          </div>
+          <div className="flex-1 min-w-[130px]">
+            <label className="field-label">По дату</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)}
+              className="mt-1 crm-control w-full" />
+          </div>
+          {(dateFrom || dateTo) && (
+            <button onClick={() => { setDateFrom(''); setDateTo('') }}
+              className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">
+              Сбросить
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Orders */}
       {ordersLoading ? (

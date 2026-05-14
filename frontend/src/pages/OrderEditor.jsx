@@ -340,7 +340,17 @@ export function OrderEditor() {
   const statusMutation = useMutation({
     mutationFn: (status) => updateOrder(orderId, { status }),
     onSuccess: (res) => {
-      qc.setQueryData(['order', orderId], (old) => old ? { ...old, status: res.data.status } : old)
+      const newStatus = res.data.status
+      qc.setQueryData(['order', orderId], (old) => old ? { ...old, status: newStatus } : old)
+      // Instantly update ClientDetail list without waiting for unmount
+      if (order?.client) {
+        qc.setQueryData(['client-orders', String(order.client)], (old) => {
+          if (!old) return old
+          const list = old?.results || old
+          const updated = list.map((o) => o.id === Number(orderId) ? { ...o, status: newStatus } : o)
+          return Array.isArray(old) ? updated : { ...old, results: updated }
+        })
+      }
     },
   })
 
@@ -461,6 +471,19 @@ export function OrderEditor() {
       flashTimersRef.current = {}
     }
   }, [])
+
+  // On unmount: refresh client's order list so status changes (incl. auto new→in_progress) show instantly
+  const clientIdRef = useRef(null)
+  useEffect(() => {
+    if (order?.client) clientIdRef.current = String(order.client)
+  }, [order?.client])
+  useEffect(() => {
+    return () => {
+      if (clientIdRef.current) {
+        qc.invalidateQueries(['client-orders', clientIdRef.current])
+      }
+    }
+  }, [qc])
 
   // ── Data ──
   // Keep hook order stable across loading/error states.
@@ -665,12 +688,6 @@ export function OrderEditor() {
         </div>
       )}
 
-      {/* WS banner */}
-      {!connected && (
-        <div className="bg-amber-50 border-b border-amber-100 px-4 py-1.5 flex items-center justify-center gap-2 text-xs text-amber-600">
-          Нет соединения — переподключение...
-        </div>
-      )}
 
       {/* ── Desktop table ── */}
       <div className="hidden md:block flex-1 overflow-auto bg-white mx-4 mt-4 rounded-2xl border border-neutral-100 shadow-panel">
