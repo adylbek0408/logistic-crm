@@ -314,15 +314,13 @@ export function ClientDetail() {
                     <span className="text-xs text-neutral-400 tabular">{order.done_count}/{order.rows_count}</span>
                   </div>
                 </Link>
-                {user?.is_owner && (
-                  <button
-                    onClick={(e) => { e.preventDefault(); setDeleteOrderTarget(order) }}
-                    className="absolute top-3 right-10 opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-red-500 hover:bg-red-50"
-                    title="Удалить заказ"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                )}
+                <button
+                  onClick={(e) => { e.preventDefault(); setDeleteOrderTarget(order) }}
+                  className="absolute top-3 right-10 opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-lg text-neutral-300 hover:text-red-500 hover:bg-red-50"
+                  title="Удалить заказ"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
             )
           })}

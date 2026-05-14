@@ -5,7 +5,7 @@ import {
   ArrowLeft, FileDown, CheckCircle2, XCircle, Circle,
   ChevronDown, Loader2, ChevronLeft, ChevronRight, Search, X, Trash2,
 } from 'lucide-react'
-import { getOrder, updateOrder, updateOrderRow, downloadPdf, deleteOrder } from '../api/endpoints'
+import { getOrder, updateOrder, updateOrderRow, deleteOrder } from '../api/endpoints'
 import { useOrderWebSocket } from '../hooks/useWebSocket'
 import { formatDate, formatMoney, initials } from '../utils/format'
 import { Modal } from '../components/ui/Modal'
@@ -252,7 +252,6 @@ export function OrderEditor() {
   const { user } = useAuthStore()
   const qc = useQueryClient()
 
-  const [pdfLoading, setPdfLoading]   = useState(false)
   const [connected, setConnected]     = useState(false)
   const [locks, setLocks]             = useState({})
   const [flashRows, setFlashRows]     = useState({})
@@ -437,20 +436,10 @@ export function OrderEditor() {
     send({ event: 'order:status', status: newStatus })
   }
 
-  const handleDownloadPdf = async () => {
-    setPdfLoading(true)
-    try {
-      const res = await downloadPdf(orderId)
-      const blob = new Blob([res.data], { type: 'application/pdf' })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement('a')
-      a.href = url
-      a.download = `invoice_${orderId}_${new Date().toISOString().slice(0, 10)}.pdf`
-      document.body.appendChild(a); a.click()
-      document.body.removeChild(a); URL.revokeObjectURL(url)
-    } finally {
-      setPdfLoading(false)
-    }
+  const handleDownloadPdf = () => {
+    const token = localStorage.getItem('access_token')
+    const base = window.location.origin
+    window.open(`${base}/api/orders/${orderId}/download-pdf/?token=${token}`, '_blank')
   }
 
   const handleComplete = (e) => {
@@ -601,35 +590,29 @@ export function OrderEditor() {
               </span>
             )}
 
-            {user?.is_owner && (
-              <button onClick={() => setShowComplete(true)}
-                className="hidden sm:inline-flex min-h-touch px-3 bg-accent text-white rounded-xl text-xs font-bold hover:bg-amber-500 transition-colors items-center">
-                Завершить
-              </button>
-            )}
-            {user?.is_owner && (
-              <button onClick={() => setShowComplete(true)}
-                className="sm:hidden mobile-tap inline-flex items-center justify-center rounded-xl bg-accent text-white hover:bg-amber-500 transition-colors"
-                title="Завершить заказ">
-                <CheckCircle2 size={14} />
-              </button>
-            )}
+            <button onClick={() => setShowComplete(true)}
+              className="hidden sm:inline-flex min-h-touch px-3 bg-accent text-white rounded-xl text-xs font-bold hover:bg-amber-500 transition-colors items-center">
+              Завершить
+            </button>
+            <button onClick={() => setShowComplete(true)}
+              className="sm:hidden mobile-tap inline-flex items-center justify-center rounded-xl bg-accent text-white hover:bg-amber-500 transition-colors"
+              title="Завершить заказ">
+              <CheckCircle2 size={14} />
+            </button>
 
-            <button onClick={handleDownloadPdf} disabled={pdfLoading}
-              className="mobile-tap inline-flex items-center justify-center gap-1 px-2.5 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all disabled:opacity-50">
-              {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+            <button onClick={handleDownloadPdf}
+              className="mobile-tap inline-flex items-center justify-center gap-1 px-2.5 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all">
+              <FileDown size={12} />
               <span className="hidden sm:inline">PDF</span>
             </button>
 
-            {user?.is_owner && (
-              <button
-                onClick={() => setShowDeleteOrder(true)}
-                className="mobile-tap inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
-                title="Удалить заказ"
-              >
-                <Trash2 size={15} />
-              </button>
-            )}
+            <button
+              onClick={() => setShowDeleteOrder(true)}
+              className="mobile-tap inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
+              title="Удалить заказ"
+            >
+              <Trash2 size={15} />
+            </button>
 
             {/* Search — desktop inline, mobile toggle */}
             <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-neutral-200 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 bg-white transition-all w-44">
@@ -831,22 +814,24 @@ export function OrderEditor() {
             />
           </div>
 
-          <div>
-            <label className="text-sm font-semibold text-neutral-700 block mb-2">Статус оплаты</label>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { val: 'paid',   label: '✓ Оплачен',    on: 'bg-success text-white border-success' },
-                { val: 'unpaid', label: '✗ Не оплачен', on: 'bg-neutral-200 text-neutral-700 border-neutral-200' },
-              ].map(({ val, label, on }) => (
-                <button key={val} type="button"
-                  onClick={() => setCompletionForm((f) => ({ ...f, payment_status: val }))}
-                  className={`py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
-                    completionForm.payment_status === val ? on : 'border-neutral-200 text-neutral-400 hover:border-neutral-300'
-                  }`}
-                >{label}</button>
-              ))}
+          {user?.is_owner && (
+            <div>
+              <label className="text-sm font-semibold text-neutral-700 block mb-2">Статус оплаты</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { val: 'paid',   label: '✓ Оплачен',    on: 'bg-success text-white border-success' },
+                  { val: 'unpaid', label: '✗ Не оплачен', on: 'bg-neutral-200 text-neutral-700 border-neutral-200' },
+                ].map(({ val, label, on }) => (
+                  <button key={val} type="button"
+                    onClick={() => setCompletionForm((f) => ({ ...f, payment_status: val }))}
+                    className={`py-2.5 rounded-xl border-2 text-sm font-semibold transition-all ${
+                      completionForm.payment_status === val ? on : 'border-neutral-200 text-neutral-400 hover:border-neutral-300'
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="flex gap-3 pt-1">
             <button type="button" onClick={() => setShowComplete(false)}

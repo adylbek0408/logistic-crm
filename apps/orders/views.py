@@ -78,8 +78,6 @@ class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Order.objects.select_related('client', 'template', 'created_by').prefetch_related('rows__updated_by')
 
     def get_permissions(self):
-        if self.request.method == 'DELETE':
-            return [IsOwner()]
         return [permissions.IsAuthenticated()]
 
     def get_serializer_class(self):
@@ -134,20 +132,27 @@ class GeneratePDFView(APIView):
 class DownloadPDFView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    def initialize_request(self, request, *args, **kwargs):
+        # Allow JWT via ?token= query param for mobile browsers
+        token = request.GET.get('token')
+        if token and 'HTTP_AUTHORIZATION' not in request.META:
+            request.META['HTTP_AUTHORIZATION'] = f'Bearer {token}'
+        return super().initialize_request(request, *args, **kwargs)
+
     def get(self, request, pk):
+        from .pdf import generate_invoice_pdf
+        from django.core.files.base import ContentFile
+        import datetime
+
         order = get_object_or_404(Order, pk=pk)
-        if not order.pdf_file:
-            # Generate synchronously if not exists
-            from .pdf import generate_invoice_pdf
-            from django.core.files.base import ContentFile
-            import datetime
-            pdf_bytes = generate_invoice_pdf(order)
-            date_str = datetime.date.today().strftime('%Y%m%d')
-            filename = f'invoice_{order.pk}_{date_str}.pdf'
-            order.pdf_file.save(filename, ContentFile(pdf_bytes), save=True)
+        # Always regenerate to ensure latest template (no stale cache)
+        pdf_bytes = generate_invoice_pdf(order)
+        date_str = datetime.date.today().strftime('%Y%m%d')
+        filename = f'invoice_{order.pk}_{date_str}.pdf'
+        order.pdf_file.save(filename, ContentFile(pdf_bytes), save=True)
 
         response = FileResponse(order.pdf_file.open('rb'), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="{order.pdf_file.name.split("/")[-1]}"'
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
 
