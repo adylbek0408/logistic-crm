@@ -1,6 +1,7 @@
 import io
 import os
 import datetime
+from xml.sax.saxutils import escape as xml_escape
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.lib import colors
@@ -76,17 +77,18 @@ def generate_invoice_pdf(order) -> bytes:
     elements.append(Spacer(1, 7 * mm))
 
     # ── Header: Покупатель (СЛЕВА) | Поставщик (СПРАВА) ──
-    buyer_display = order.buyer_name or client.display_name
+    # xml_escape prevents ReportLab XML parse errors on user text with <, >, & chars.
+    buyer_display = xml_escape(order.buyer_name or client.display_name)
     buyer_lines = [
         Paragraph('Покупатель:', _ps('bh', 8, bold=True, color=colors.HexColor('#6B7280'))),
         Paragraph(buyer_display, _ps('bn', 11, bold=True)),
     ]
     if not order.buyer_name and client.brand_name:
-        buyer_lines.append(Paragraph(client.brand_name, _ps('bb', 9)))
+        buyer_lines.append(Paragraph(xml_escape(client.brand_name), _ps('bb', 9)))
     if client.phone:
-        buyer_lines.append(Paragraph(f'Тел: {client.phone}', _ps('bp', 8, color=colors.HexColor('#6B7280'))))
+        buyer_lines.append(Paragraph(f'Тел: {xml_escape(client.phone)}', _ps('bp', 8, color=colors.HexColor('#6B7280'))))
 
-    supplier_display = order.supplier_name or 'Асылбек'
+    supplier_display = xml_escape(order.supplier_name or 'Асылбек')
     supplier_lines = [
         Paragraph('Поставщик:', _ps('sh', 8, bold=True, color=colors.HexColor('#6B7280'))),
         Paragraph(supplier_display, _ps('sn', 11, bold=True)),
@@ -163,7 +165,7 @@ def generate_invoice_pdf(order) -> bytes:
 
         table_data.append([
             Paragraph(str(row.row_number), _ps(f'n{row.pk}', 8, align=TA_CENTER)),
-            Paragraph(row.item_name or '', cell),
+            Paragraph(xml_escape(row.item_name or ''), cell),
             Paragraph(vp_char, vp_ps),
             Paragraph(qty_str if is_done else '', cell_r),
             Paragraph(unit_str, cell),

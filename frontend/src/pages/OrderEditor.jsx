@@ -33,19 +33,64 @@ const MobileRow = memo(function MobileRow({ row, onUpdate, onLock, onUnlock, loc
   const localRef = useRef(row)
   const [local, setLocal] = useState(row)
   const debounce = useRef(null)
+  const lastChangeAt = useRef(0)
+  // hasPendingDebounce: true while a text/number debounce timer is outstanding
+  const hasPendingDebounce = useRef(false)
+  // pendingUnlock: blur happened while debounce was pending; unlock after debounce fires
+  const pendingUnlock = useRef(false)
 
   useEffect(() => {
+    if (Date.now() - lastChangeAt.current < 2000) return
     localRef.current = row
     setLocal(row)
   }, [row.updated_at])
 
+  // Sends the FULL current row state, not just the last-changed field.
+  // This prevents data loss when the user edits multiple fields faster than 500ms.
+  const flushDebounce = () => {
+    hasPendingDebounce.current = false
+    const { item_name, fulfillment_status, quantity, unit, price } = localRef.current
+    onUpdate(row.id, { item_name, fulfillment_status, quantity, unit, price })
+    if (pendingUnlock.current) {
+      pendingUnlock.current = false
+      onUnlock(row.id)
+    }
+  }
+
   const change = (key, val) => {
+    lastChangeAt.current = Date.now()
     const next = { ...localRef.current, [key]: val }
     localRef.current = next
     setLocal(next)
     onLocalChange(row.id, next)
+    hasPendingDebounce.current = true
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => onUpdate(row.id, { [key]: val }), 500)
+    debounce.current = setTimeout(flushDebounce, 500)
+  }
+
+  // For button clicks (status, unit) — fires immediately, never clears the text debounce
+  const changeImmediate = (key, val) => {
+    lastChangeAt.current = Date.now()
+    const next = { ...localRef.current, [key]: val }
+    localRef.current = next
+    setLocal(next)
+    onLocalChange(row.id, next)
+    onUpdate(row.id, { [key]: val })
+  }
+
+  const handleFocus = (rowId) => {
+    pendingUnlock.current = false  // user re-entered row, cancel any deferred unlock
+    onLock(rowId)
+  }
+
+  // Delay unlock until the debounce fires so other users see the row as locked
+  // while the final save is still pending.
+  const handleBlur = (rowId) => {
+    if (hasPendingDebounce.current) {
+      pendingUnlock.current = true
+    } else {
+      onUnlock(rowId)
+    }
   }
 
   const total = calcTotal(local.quantity, local.price)
@@ -70,8 +115,8 @@ const MobileRow = memo(function MobileRow({ row, onUpdate, onLock, onUnlock, loc
       <textarea
         value={local.item_name || ''}
         onChange={(e) => change('item_name', e.target.value)}
-        onFocus={() => onLock(row.id)}
-        onBlur={() => onUnlock(row.id)}
+        onFocus={() => handleFocus(row.id)}
+        onBlur={() => handleBlur(row.id)}
         placeholder="Наименование товара"
         rows={2}
         className="w-full px-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-xl outline-none focus:bg-white focus:border-primary/30 focus:ring-2 focus:ring-primary/10 resize-none"
@@ -83,7 +128,7 @@ const MobileRow = memo(function MobileRow({ row, onUpdate, onLock, onUnlock, loc
           { val: 'failed', icon: XCircle,      label: 'Не выпол.', on: 'bg-rose-500 text-white shadow-sm shadow-rose-200' },
           { val: 'empty',  icon: Circle,       label: 'Нету',      on: 'bg-neutral-200 text-neutral-700' },
         ].map(({ val, icon: Icon, label, on }) => (
-          <button key={val} onClick={() => change('fulfillment_status', val)}
+          <button key={val} onClick={() => changeImmediate('fulfillment_status', val)}
             className={`mobile-tap flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-all ${
               st === val ? on : 'bg-neutral-50 text-neutral-400 hover:bg-neutral-100'
             }`}
@@ -98,12 +143,12 @@ const MobileRow = memo(function MobileRow({ row, onUpdate, onLock, onUnlock, loc
           type="number" inputMode="decimal" step="0.001" min="0"
           value={local.quantity ?? ''} placeholder="Кол-во"
           onChange={(e) => change('quantity', e.target.value || null)}
-          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          onFocus={() => handleFocus(row.id)} onBlur={() => handleBlur(row.id)}
           className="w-full min-h-touch px-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-xl outline-none focus:bg-white focus:border-primary/30 tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
         <div className="grid grid-cols-4 gap-1">
           {Object.entries(UNIT_LABELS).map(([u, lbl]) => (
-            <button key={u} onClick={() => change('unit', u)}
+            <button key={u} onClick={() => changeImmediate('unit', u)}
               className={`min-h-touch text-xs py-2 rounded-xl border font-medium transition-all ${
                 local.unit === u ? 'bg-primary text-white border-primary' : 'border-neutral-200 text-neutral-400 hover:border-primary/40'
               }`}
@@ -117,7 +162,7 @@ const MobileRow = memo(function MobileRow({ row, onUpdate, onLock, onUnlock, loc
           type="number" inputMode="decimal" step="0.01" min="0"
           value={local.price ?? ''} placeholder="Цена (сом)"
           onChange={(e) => change('price', e.target.value || null)}
-          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          onFocus={() => handleFocus(row.id)} onBlur={() => handleBlur(row.id)}
           className="flex-1 min-h-touch px-3 py-2 text-sm bg-neutral-50 border border-transparent rounded-xl outline-none focus:bg-white focus:border-primary/30 tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
         <div className={`text-sm font-bold tabular px-3 py-2 rounded-xl min-w-[80px] text-right shrink-0 ${total != null ? 'bg-primary/5 text-primary' : 'text-neutral-300'}`}>
@@ -134,19 +179,57 @@ const TableRow = memo(function TableRow({ row, onUpdate, onLock, onUnlock, locke
   const localRef = useRef(row)
   const [local, setLocal] = useState(row)
   const debounce = useRef(null)
+  const lastChangeAt = useRef(0)
+  const hasPendingDebounce = useRef(false)
+  const pendingUnlock = useRef(false)
 
   useEffect(() => {
+    if (Date.now() - lastChangeAt.current < 2000) return
     localRef.current = row
     setLocal(row)
   }, [row.updated_at])
 
+  const flushDebounce = () => {
+    hasPendingDebounce.current = false
+    const { item_name, fulfillment_status, quantity, unit, price } = localRef.current
+    onUpdate(row.id, { item_name, fulfillment_status, quantity, unit, price })
+    if (pendingUnlock.current) {
+      pendingUnlock.current = false
+      onUnlock(row.id)
+    }
+  }
+
   const change = (key, val) => {
+    lastChangeAt.current = Date.now()
     const next = { ...localRef.current, [key]: val }
     localRef.current = next
     setLocal(next)
     onLocalChange(row.id, next)
+    hasPendingDebounce.current = true
     clearTimeout(debounce.current)
-    debounce.current = setTimeout(() => onUpdate(row.id, { [key]: val }), 500)
+    debounce.current = setTimeout(flushDebounce, 500)
+  }
+
+  const changeImmediate = (key, val) => {
+    lastChangeAt.current = Date.now()
+    const next = { ...localRef.current, [key]: val }
+    localRef.current = next
+    setLocal(next)
+    onLocalChange(row.id, next)
+    onUpdate(row.id, { [key]: val })
+  }
+
+  const handleFocus = (rowId) => {
+    pendingUnlock.current = false
+    onLock(rowId)
+  }
+
+  const handleBlur = (rowId) => {
+    if (hasPendingDebounce.current) {
+      pendingUnlock.current = true
+    } else {
+      onUnlock(rowId)
+    }
   }
 
   const total = calcTotal(local.quantity, local.price)
@@ -160,7 +243,7 @@ const TableRow = memo(function TableRow({ row, onUpdate, onLock, onUnlock, locke
         <textarea
           value={local.item_name || ''}
           onChange={(e) => change('item_name', e.target.value)}
-          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          onFocus={() => handleFocus(row.id)} onBlur={() => handleBlur(row.id)}
           placeholder="Наименование товара"
           rows={1}
           className="w-full px-2 py-1.5 text-sm border-0 bg-transparent rounded-lg outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 resize-none"
@@ -174,7 +257,7 @@ const TableRow = memo(function TableRow({ row, onUpdate, onLock, onUnlock, locke
             { val: 'failed', icon: XCircle,      on: 'bg-rose-500 text-white' },
             { val: 'empty',  icon: Circle,       on: 'bg-neutral-200 text-neutral-600' },
           ].map(({ val, icon: Icon, on }) => (
-            <button key={val} onClick={() => change('fulfillment_status', val)}
+            <button key={val} onClick={() => changeImmediate('fulfillment_status', val)}
               title={val === 'done' ? 'Выполнен' : val === 'failed' ? 'Не выполнен' : 'Нету'}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
                 st === val ? on : 'text-neutral-300 hover:text-neutral-500 hover:bg-neutral-100'
@@ -190,14 +273,14 @@ const TableRow = memo(function TableRow({ row, onUpdate, onLock, onUnlock, locke
           type="number" inputMode="decimal" step="0.001" min="0"
           value={local.quantity ?? ''}
           onChange={(e) => change('quantity', e.target.value || null)}
-          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          onFocus={() => handleFocus(row.id)} onBlur={() => handleBlur(row.id)}
           className="w-full px-2 py-1.5 text-sm text-right bg-transparent border border-transparent hover:border-neutral-200 focus:border-primary/40 focus:bg-white rounded-lg outline-none tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
       </td>
       <td className="px-1 py-1 w-36">
         <div className="flex gap-0.5">
           {Object.entries(UNIT_LABELS).map(([u, lbl]) => (
-            <button key={u} onClick={() => change('unit', u)}
+            <button key={u} onClick={() => changeImmediate('unit', u)}
               className={`flex-1 text-xs py-1.5 rounded-lg border font-medium transition-all ${
                 local.unit === u ? 'bg-primary text-white border-primary' : 'border-neutral-100 text-neutral-400 hover:border-primary/30 hover:text-primary'
               }`}
@@ -210,7 +293,7 @@ const TableRow = memo(function TableRow({ row, onUpdate, onLock, onUnlock, locke
           type="number" inputMode="decimal" step="0.01" min="0"
           value={local.price ?? ''}
           onChange={(e) => change('price', e.target.value || null)}
-          onFocus={() => onLock(row.id)} onBlur={() => onUnlock(row.id)}
+          onFocus={() => handleFocus(row.id)} onBlur={() => handleBlur(row.id)}
           className="w-full px-2 py-1.5 text-sm text-right bg-transparent border border-transparent hover:border-neutral-200 focus:border-primary/40 focus:bg-white rounded-lg outline-none tabular [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
         />
       </td>
@@ -382,13 +465,19 @@ export function OrderEditor() {
     onDisconnect: () => setConnected(false),
     onMessage: useCallback((msg) => {
       if (msg.event === 'user:left') {
-        // no-op (removed user panel)
+        // Clear all row locks held by the disconnecting user
+        setLocks((l) => {
+          const n = { ...l }
+          Object.keys(n).forEach((k) => { if (n[k].user_id === msg.user_id) delete n[k] })
+          return n
+        })
       } else if (msg.event === 'row:lock' && msg.user_id !== user?.id) {
-        setLocks((l) => ({ ...l, [msg.row_id]: msg.user_name }))
+        setLocks((l) => ({ ...l, [msg.row_id]: { user_id: msg.user_id, user_name: msg.user_name } }))
       } else if (msg.event === 'row:unlock') {
         setLocks((l) => { const n = { ...l }; delete n[msg.row_id]; return n })
-      } else if (msg.event === 'row:updated' && msg.user_id !== user?.id) {
-        // Surgical cache update — no HTTP refetch
+      } else if (msg.event === 'row:updated') {
+        const isOwn = msg.user_id === user?.id
+        // Always keep cache in sync with server (own saves too — ensures consistency)
         qc.setQueryData(['order', orderId], (old) => {
           if (!old) return old
           return {
@@ -398,7 +487,6 @@ export function OrderEditor() {
             ),
           }
         })
-        // Also update rowStats for instant summary
         setRowStats((prev) => ({
           ...prev,
           [msg.row_id]: {
@@ -408,11 +496,14 @@ export function OrderEditor() {
               : calcTotal(msg.fields.quantity, msg.fields.price) ?? prev[msg.row_id]?.total,
           },
         }))
-        setFlashRows((f) => ({ ...f, [msg.row_id]: true }))
-        clearTimeout(flashTimersRef.current[msg.row_id])
-        flashTimersRef.current[msg.row_id] = setTimeout(() => {
-          setFlashRows((f) => { const n = { ...f }; delete n[msg.row_id]; return n })
-        }, 800)
+        // Only flash for other users' updates — flashing own rows is confusing
+        if (!isOwn) {
+          setFlashRows((f) => ({ ...f, [msg.row_id]: true }))
+          clearTimeout(flashTimersRef.current[msg.row_id])
+          flashTimersRef.current[msg.row_id] = setTimeout(() => {
+            setFlashRows((f) => { const n = { ...f }; delete n[msg.row_id]; return n })
+          }, 800)
+        }
       } else if (msg.event === 'order:status') {
         qc.setQueryData(['order', orderId], (old) => old ? { ...old, status: msg.status } : old)
       }
@@ -573,33 +664,33 @@ export function OrderEditor() {
           </div>
 
           {/* Right */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
 
             {/* Connection dot — compact, only if disconnected */}
             {!connected && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" title="Нет соединения" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" title="Нет соединения" />
             )}
 
             {/* Status */}
             {user?.is_owner ? (
-              <div className="relative">
+              <div className="relative shrink-0">
                 <select
                   value={order.status}
                   onChange={(e) => handleStatusChange(e.target.value)}
-                  className="appearance-none pl-6 pr-6 py-1.5 rounded-xl border border-neutral-200 text-xs font-semibold outline-none focus:border-primary bg-white cursor-pointer"
+                  className="appearance-none pl-5 pr-5 py-1.5 rounded-xl border border-neutral-200 text-xs font-semibold outline-none focus:border-primary bg-white cursor-pointer"
                 >
                   {STATUS_OPTS.map((s) => <option key={s.val} value={s.val}>{s.label}</option>)}
                 </select>
-                <span className={`absolute left-2 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${currentStatus.dot}`} />
-                <ChevronDown size={11} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
+                <span className={`absolute left-1.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full ${currentStatus.dot}`} />
+                <ChevronDown size={10} className="absolute right-1 top-1/2 -translate-y-1/2 text-neutral-400 pointer-events-none" />
               </div>
             ) : (
-              <span className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold border ${
+              <span className={`flex items-center gap-1 px-2 py-1.5 rounded-xl text-xs font-semibold border shrink-0 ${
                 order.status === 'new'         ? 'bg-blue-50 text-blue-700 border-blue-100' :
                 order.status === 'in_progress' ? 'bg-amber-50 text-amber-700 border-amber-100' :
                                                  'bg-emerald-50 text-emerald-700 border-emerald-100'
               }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${currentStatus.dot}`} />
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${currentStatus.dot}`} />
                 {currentStatus.label}
               </span>
             )}
@@ -608,21 +699,27 @@ export function OrderEditor() {
               className="hidden sm:inline-flex min-h-touch px-3 bg-accent text-white rounded-xl text-xs font-bold hover:bg-amber-500 transition-colors items-center">
               Завершить
             </button>
+            {/* Mobile icon-only buttons — 36px for compact header */}
             <button onClick={() => setShowComplete(true)}
-              className="sm:hidden mobile-tap inline-flex items-center justify-center rounded-xl bg-accent text-white hover:bg-amber-500 transition-colors"
+              className="sm:hidden h-9 w-9 inline-flex items-center justify-center rounded-xl bg-accent text-white hover:bg-amber-500 transition-colors shrink-0"
               title="Завершить заказ">
-              <CheckCircle2 size={14} />
+              <CheckCircle2 size={16} />
             </button>
 
             <button onClick={handleDownloadPdf}
-              className="mobile-tap inline-flex items-center justify-center gap-1 px-2.5 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all">
+              className="hidden sm:inline-flex mobile-tap items-center justify-center gap-1 px-2.5 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all">
               <FileDown size={12} />
-              <span className="hidden sm:inline">PDF</span>
+              PDF
+            </button>
+            <button onClick={handleDownloadPdf}
+              className="sm:hidden h-9 w-9 inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all shrink-0"
+              title="Скачать PDF">
+              <FileDown size={15} />
             </button>
 
             <button
               onClick={() => setShowDeleteOrder(true)}
-              className="mobile-tap inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors"
+              className="h-9 w-9 inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50 transition-colors shrink-0"
               title="Удалить заказ"
             >
               <Trash2 size={15} />
@@ -646,7 +743,7 @@ export function OrderEditor() {
 
             <button
               onClick={() => { setShowSearch(s => !s); if (showSearch) setSearchQuery('') }}
-              className={`md:hidden mobile-tap inline-flex items-center justify-center rounded-xl border transition-colors ${
+              className={`md:hidden h-9 w-9 inline-flex items-center justify-center rounded-xl border transition-colors shrink-0 ${
                 showSearch || searchQuery ? 'border-primary text-primary bg-primary/5' : 'border-neutral-200 text-neutral-500'
               }`}
             >
@@ -706,7 +803,7 @@ export function OrderEditor() {
                 key={row.id} row={row}
                 onUpdate={handleRowUpdate} onLock={handleLock} onUnlock={handleUnlock}
                 onLocalChange={handleLocalChange}
-                lockedBy={locks[row.id]} flash={flashRows[row.id]}
+                lockedBy={locks[row.id]?.user_name} flash={flashRows[row.id]}
               />
             ))}
           </tbody>
@@ -741,7 +838,7 @@ export function OrderEditor() {
             key={row.id} row={row}
             onUpdate={handleRowUpdate} onLock={handleLock} onUnlock={handleUnlock}
             onLocalChange={handleLocalChange}
-            lockedBy={locks[row.id]} flash={flashRows[row.id]}
+            lockedBy={locks[row.id]?.user_name} flash={flashRows[row.id]}
           />
         ))}
         {!isSearching && <PageNav current={safePage} total={totalPages} onChange={(p) => { setCurrentPage(p); window.scrollTo(0, 0) }} />}

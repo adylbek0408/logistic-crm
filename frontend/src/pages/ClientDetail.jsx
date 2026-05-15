@@ -11,7 +11,7 @@ import { STATUS_META } from '../utils/status'
 import useAuthStore from '../store/auth'
 import {
   ArrowLeft, Phone, ShoppingBag, CalendarDays, FileText,
-  PackagePlus, ArrowRight, LayoutTemplate, Loader2, Pencil, Trash2, SlidersHorizontal,
+  PackagePlus, ArrowRight, LayoutTemplate, Loader2, Pencil, Trash2, SlidersHorizontal, XCircle,
 } from 'lucide-react'
 import { initials } from '../utils/format'
 
@@ -44,7 +44,7 @@ export function ClientDetail() {
   const [dateTo, setDateTo] = useState('')
   const qc = useQueryClient()
 
-  const { data: client, isLoading: clientLoading } = useQuery({
+  const { data: client, isLoading: clientLoading, isError: clientError } = useQuery({
     queryKey: ['client', id],
     queryFn: () => getClient(id).then((r) => r.data),
   })
@@ -129,7 +129,23 @@ export function ClientDetail() {
     </div>
   )
 
-  if (!client) return null
+  if (clientError || !client) return (
+    <div className="page-wrap max-w-3xl space-y-4">
+      <button
+        onClick={() => navigate('/clients')}
+        className="mobile-tap inline-flex items-center gap-1.5 text-sm text-neutral-500 hover:text-primary transition-colors"
+      >
+        <ArrowLeft size={16} /> Все клиенты
+      </button>
+      <div className="panel p-10 text-center">
+        <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <XCircle size={24} className="text-rose-400" />
+        </div>
+        <div className="font-semibold text-neutral-700">Клиент не найден</div>
+        <div className="text-sm text-neutral-400 mt-1">Возможно, клиент был удалён</div>
+      </div>
+    </div>
+  )
 
   return (
     <div className="page-wrap max-w-3xl space-y-5">

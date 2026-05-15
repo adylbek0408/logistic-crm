@@ -8,6 +8,7 @@ class OrderConsumer(AsyncWebsocketConsumer):
         self.order_id = self.scope['url_route']['kwargs']['order_id']
         self.group_name = f'order_{self.order_id}'
         self.user = self.scope.get('user')
+        self.locked_rows = set()
 
         if not self.user or not self.user.is_authenticated:
             await self.close(code=4001)
@@ -27,6 +28,16 @@ class OrderConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         if hasattr(self, 'group_name'):
+            # Release all rows this connection had locked so other clients see them unlocked immediately
+            for row_id in list(self.locked_rows):
+                await self.channel_layer.group_send(self.group_name, {
+                    'type': 'broadcast',
+                    'payload': {
+                        'event': 'row:unlock',
+                        'row_id': row_id,
+                        'user_id': self.user.id,
+                    }
+                })
             await self.channel_layer.group_send(self.group_name, {
                 'type': 'broadcast',
                 'payload': {
@@ -86,6 +97,8 @@ class OrderConsumer(AsyncWebsocketConsumer):
 
     async def _handle_row_lock(self, data):
         row_id = data.get('row_id')
+        if row_id is not None:
+            self.locked_rows.add(row_id)
         await self.channel_layer.group_send(self.group_name, {
             'type': 'broadcast',
             'payload': {
@@ -98,6 +111,8 @@ class OrderConsumer(AsyncWebsocketConsumer):
 
     async def _handle_row_unlock(self, data):
         row_id = data.get('row_id')
+        if row_id is not None:
+            self.locked_rows.discard(row_id)
         await self.channel_layer.group_send(self.group_name, {
             'type': 'broadcast',
             'payload': {

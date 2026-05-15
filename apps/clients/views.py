@@ -52,8 +52,18 @@ class ClientOrdersView(generics.ListAPIView):
 
     def get_queryset(self):
         from apps.orders.models import Order
-        from apps.orders.serializers import OrderListSerializer
-        return Order.objects.filter(client_id=self.kwargs['pk']).select_related('client', 'template')
+        # Annotations required by OrderListSerializer.get_rows_count / get_done_count.
+        # Without these, every order would show 0/0 in the progress bar.
+        return Order.objects.filter(
+            client_id=self.kwargs['pk']
+        ).select_related('client', 'template').annotate(
+            rows_count_ann=Count('rows', distinct=True),
+            done_count_ann=Count(
+                'rows',
+                filter=Q(rows__fulfillment_status='done'),
+                distinct=True,
+            ),
+        ).order_by('-created_at')
 
     def get_serializer_class(self):
         from apps.orders.serializers import OrderListSerializer
