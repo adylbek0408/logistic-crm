@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, ClipboardList, LayoutTemplate, LogOut, ChevronRight, UserCog } from 'lucide-react'
+import { LayoutDashboard, Users, ClipboardList, LayoutTemplate, LogOut, ChevronRight, UserCog, X } from 'lucide-react'
 import useAuthStore from '../../store/auth'
 import { Badge } from '../ui/Badge'
 
@@ -14,6 +15,7 @@ const NAV_ALL = [
 export function Sidebar() {
   const { user, logout } = useAuthStore()
   const navigate = useNavigate()
+  const [showUserMenu, setShowUserMenu] = useState(false)
 
   const NAV = NAV_ALL.filter((item) => !item.ownerOnly || user?.is_owner)
 
@@ -118,7 +120,48 @@ export function Sidebar() {
             )}
           </NavLink>
         ))}
+        {/* User / Logout button */}
+        <button
+          onClick={() => setShowUserMenu(true)}
+          className="flex-1 flex flex-col items-center justify-center py-2 gap-0.5 font-medium transition-colors min-h-[64px] text-neutral-400"
+        >
+          <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center text-primary text-xs font-bold">
+            {initial}
+          </div>
+          <span className="text-[10px] leading-tight truncate max-w-full px-1">Аккаунт</span>
+        </button>
       </nav>
+
+      {/* Mobile user menu overlay */}
+      {showUserMenu && (
+        <div className="md:hidden fixed inset-0 z-50 flex items-end" onClick={() => setShowUserMenu(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative w-full bg-white rounded-t-2xl p-5 pb-safe" onClick={(e) => e.stopPropagation()}
+            style={{ paddingBottom: 'calc(1.25rem + env(safe-area-inset-bottom, 0px))' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                  {initial}
+                </div>
+                <div>
+                  <div className="font-semibold text-neutral-800">{user?.full_name || user?.username}</div>
+                  <div className="text-xs text-neutral-400">{user?.is_owner ? 'Владелец' : 'Сотрудник'}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowUserMenu(false)} className="p-2 text-neutral-400 hover:text-neutral-600">
+                <X size={18} />
+              </button>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-red-50 text-red-500 text-sm font-semibold hover:bg-red-100 transition-colors"
+            >
+              <LogOut size={16} />
+              Выйти из аккаунта
+            </button>
+          </div>
+        </div>
+      )}
     </>
   )
 }

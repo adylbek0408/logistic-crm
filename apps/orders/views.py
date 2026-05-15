@@ -44,7 +44,9 @@ class OrderListCreateView(generics.ListCreateAPIView):
         ).order_by('-created_at')
 
         status_filter = self.request.query_params.get('status')
-        if status_filter:
+        if status_filter == 'active':
+            qs = qs.filter(status__in=['new', 'in_progress'])
+        elif status_filter:
             qs = qs.filter(status=status_filter)
 
         client_id = self.request.query_params.get('client')

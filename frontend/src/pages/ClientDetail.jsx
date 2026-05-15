@@ -53,6 +53,7 @@ export function ClientDetail() {
   const { data: ordersData, isLoading: ordersLoading } = useQuery({
     queryKey: ['client-orders', id],
     queryFn: () => getClientOrders(id, {}).then((r) => r.data),
+    staleTime: 30000,
   })
 
   const allOrders = ordersData?.results || ordersData || []

@@ -334,6 +334,13 @@ export function OrderEditor() {
 
   const rowUpdateMutation = useMutation({
     mutationFn: ({ rowId, data }) => updateOrderRow(orderId, rowId, data),
+    onSuccess: (res, { rowId }) => {
+      // Keep cache in sync so re-entering the order shows fresh row data
+      qc.setQueryData(['order', orderId], (old) => {
+        if (!old) return old
+        return { ...old, rows: old.rows.map((r) => r.id === rowId ? { ...r, ...res.data } : r) }
+      })
+    },
   })
 
   const statusMutation = useMutation({
@@ -438,8 +445,15 @@ export function OrderEditor() {
 
   const handleDownloadPdf = () => {
     const token = localStorage.getItem('access_token')
-    const base = window.location.origin
-    window.open(`${base}/api/orders/${orderId}/download-pdf/?token=${token}`, '_blank')
+    const url = `${window.location.origin}/api/orders/${orderId}/download-pdf/?token=${token}`
+    const a = document.createElement('a')
+    a.href = url
+    a.target = '_blank'
+    a.rel = 'noopener noreferrer'
+    a.download = `invoice_${orderId}_${new Date().toISOString().slice(0, 10)}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
   }
 
   const handleComplete = (e) => {

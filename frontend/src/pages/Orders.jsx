@@ -77,7 +77,7 @@ function OrderCard({ order }) {
   )
 }
 
-const EMPTY_FILTERS = { status: '', payment_status: '', client: '', date_from: '', date_to: '' }
+const EMPTY_FILTERS = { status: 'active', payment_status: '', client: '', date_from: '', date_to: '' }
 
 export function Orders() {
   const [filters, setFilters] = useState(EMPTY_FILTERS)
@@ -97,7 +97,7 @@ export function Orders() {
   const clientsList = clientsData?.results || clientsData || []
 
   const orders = data?.results || data || []
-  const activeFilters = Object.values(filters).filter(Boolean).length
+  const activeFilters = Object.entries(filters).filter(([k, v]) => v && !(k === 'status' && v === 'active')).length
 
   return (
     <div className="page-wrap">
@@ -146,10 +146,11 @@ export function Orders() {
             onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
             className="crm-control w-full sm:min-w-[170px]"
           >
+            <option value="active">Новые + В процессе</option>
             <option value="">Все статусы</option>
             <option value="new">Новый</option>
             <option value="in_progress">В процессе</option>
-            <option value="completed">Завершён</option>
+            <option value="completed">Завершённые</option>
           </select>
         </div>
         <div className="w-full sm:w-auto">
