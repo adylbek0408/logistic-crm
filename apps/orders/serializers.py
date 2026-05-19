@@ -90,13 +90,14 @@ class OrderListSerializer(serializers.ModelSerializer):
     client_brand = serializers.CharField(source='client.brand_name', read_only=True)
     rows_count = serializers.SerializerMethodField()
     done_count = serializers.SerializerMethodField()
+    order_revenue = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = [
             'id', 'client', 'client_name', 'client_brand',
             'status', 'payment_status', 'created_at', 'sent_at',
-            'rows_count', 'done_count',
+            'rows_count', 'done_count', 'order_revenue',
         ]
 
     def get_rows_count(self, obj):
@@ -104,3 +105,7 @@ class OrderListSerializer(serializers.ModelSerializer):
 
     def get_done_count(self, obj):
         return getattr(obj, 'done_count_ann', 0)
+
+    def get_order_revenue(self, obj):
+        val = getattr(obj, 'order_revenue_ann', None)
+        return float(val) if val else 0.0

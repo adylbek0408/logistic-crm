@@ -1,6 +1,6 @@
 from rest_framework import generics, permissions, filters
 from rest_framework.response import Response
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Sum, F, ExpressionWrapper, DecimalField
 from .models import Client
 from .serializers import ClientSerializer, ClientListSerializer
 from apps.accounts.permissions import IsOwner, IsOwnerOrReadOnly
@@ -52,18 +52,32 @@ class ClientOrdersView(generics.ListAPIView):
 
     def get_queryset(self):
         from apps.orders.models import Order
-        # Annotations required by OrderListSerializer.get_rows_count / get_done_count.
-        # Without these, every order would show 0/0 in the progress bar.
-        return Order.objects.filter(
-            client_id=self.kwargs['pk']
-        ).select_related('client', 'template').annotate(
-            rows_count_ann=Count('rows', distinct=True),
-            done_count_ann=Count(
-                'rows',
-                filter=Q(rows__fulfillment_status='done'),
-                distinct=True,
-            ),
-        ).order_by('-created_at')
+        rev_expr = ExpressionWrapper(
+            F('rows__quantity') * F('rows__price'),
+            output_field=DecimalField(max_digits=14, decimal_places=2),
+        )
+        return (
+            Order.objects
+            .filter(client_id=self.kwargs['pk'])
+            .select_related('client', 'template')
+            .annotate(
+                rows_count_ann=Count('rows', distinct=True),
+                done_count_ann=Count(
+                    'rows',
+                    filter=Q(rows__fulfillment_status='done'),
+                    distinct=True,
+                ),
+                order_revenue_ann=Sum(
+                    rev_expr,
+                    filter=Q(
+                        rows__fulfillment_status='done',
+                        rows__quantity__isnull=False,
+                        rows__price__isnull=False,
+                    ),
+                ),
+            )
+            .order_by('-created_at')
+        )
 
     def get_serializer_class(self):
         from apps.orders.serializers import OrderListSerializer

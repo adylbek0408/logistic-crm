@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getClient, getClientOrders, getTemplates, createOrder, updateClient, deleteClient, deleteOrder, getOrder } from '../api/endpoints'
-import { formatDate } from '../utils/format'
+import { formatDate, formatMoney } from '../utils/format'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { SkeletonCard } from '../components/ui/Skeleton'
@@ -64,6 +64,16 @@ export function ClientDetail() {
     in_progress:   allOrders.filter((o) => o.status === 'in_progress').length,
     completed:     allOrders.filter((o) => o.status === 'completed').length,
   }), [allOrders])
+
+  // Revenue computed from filtered orders (respects date filter automatically)
+  const filteredRevenue = useMemo(() => {
+    const src = allOrders.filter((o) => {
+      if (dateFrom && o.created_at.slice(0, 10) < dateFrom) return false
+      if (dateTo && o.created_at.slice(0, 10) > dateTo) return false
+      return true
+    })
+    return src.reduce((s, o) => s + (o.order_revenue || 0), 0)
+  }, [allOrders, dateFrom, dateTo])
 
   const { data: templates } = useQuery({
     queryKey: ['templates'],
@@ -190,6 +200,20 @@ export function ClientDetail() {
             {client.notes && (
               <div className="mt-3 text-sm text-neutral-500 bg-neutral-50 rounded-xl p-3 leading-relaxed">
                 {client.notes}
+              </div>
+            )}
+
+            {/* Revenue block */}
+            {!ordersLoading && (
+              <div className="mt-3 flex items-center gap-2">
+                <div className="flex-1 bg-emerald-50 rounded-xl px-4 py-2.5 flex items-center justify-between">
+                  <span className="text-xs text-emerald-600 font-medium">
+                    {dateFrom || dateTo ? 'Выручка за период' : 'Общая выручка'}
+                  </span>
+                  <span className="text-base font-black text-emerald-600 tabular">
+                    {formatMoney(filteredRevenue)} <span className="text-xs font-medium">сом</span>
+                  </span>
+                </div>
               </div>
             )}
           </div>
