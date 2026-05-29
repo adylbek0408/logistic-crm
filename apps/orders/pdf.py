@@ -65,7 +65,12 @@ def generate_invoice_pdf(order) -> bytes:
 
     elements = []
     client = order.client
-    date_str = order.sent_at.strftime('%d.%m.%Y') if order.sent_at else ''
+    if order.sent_at:
+        from django.utils import timezone as _tz
+        local_dt = _tz.localtime(order.sent_at)
+        date_str = local_dt.strftime('%d.%m.%Y')
+    else:
+        date_str = ''
 
     # ── Title ──
     elements.append(Paragraph('НАКЛАДНАЯ', _ps('title', 16, bold=True, align=TA_CENTER)))

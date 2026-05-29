@@ -919,8 +919,25 @@ export function OrderEditor() {
 
           <div>
             <label className="text-sm font-semibold text-neutral-700 block mb-1.5">Дата отправки</label>
-            <input type="date" value={completionForm.sent_at}
-              onChange={(e) => setCompletionForm((f) => ({ ...f, sent_at: e.target.value }))}
+            <input
+              type="text"
+              placeholder="ДД.ММ.ГГГГ"
+              maxLength={10}
+              value={completionForm.sent_at_display || ''}
+              onChange={(e) => {
+                let v = e.target.value.replace(/[^\d.]/g, '')
+                // auto-insert dots
+                if (v.length === 2 && !v.includes('.')) v = v + '.'
+                if (v.length === 5 && v.split('.').length === 2) v = v + '.'
+                setCompletionForm((f) => {
+                  // convert DD.MM.YYYY → YYYY-MM-DD for backend
+                  const parts = v.split('.')
+                  const iso = parts.length === 3 && parts[2].length === 4
+                    ? `${parts[2]}-${parts[1]}-${parts[0]}`
+                    : ''
+                  return { ...f, sent_at: iso, sent_at_display: v }
+                })
+              }}
               className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary"
             />
           </div>
