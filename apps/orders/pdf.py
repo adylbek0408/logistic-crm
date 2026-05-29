@@ -65,13 +65,13 @@ def generate_invoice_pdf(order) -> bytes:
 
     elements = []
     client = order.client
-    date_str = (order.sent_at or order.created_at).strftime('%d.%m.%Y')
+    date_str = order.sent_at.strftime('%d.%m.%Y') if order.sent_at else ''
 
     # ── Title ──
     elements.append(Paragraph('НАКЛАДНАЯ', _ps('title', 16, bold=True, align=TA_CENTER)))
     elements.append(Spacer(1, 3 * mm))
     elements.append(Paragraph(
-        f'№ {order.pk}  от  {date_str}',
+        f'№ {order.pk}' + (f'  от  {date_str}' if date_str else ''),
         _ps('sub', 9, align=TA_CENTER, color=colors.HexColor('#6B7280'))
     ))
     elements.append(Spacer(1, 7 * mm))

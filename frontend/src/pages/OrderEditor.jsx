@@ -349,7 +349,7 @@ export function OrderEditor() {
   const flashTimersRef = useRef({})
 
   const [completionForm, setCompletionForm] = useState({
-    sent_at: new Date().toISOString().slice(0, 10),
+    sent_at: '',
     payment_status: 'unpaid',
     supplier_name: '',
     buyer_name: '',
