@@ -1,4 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, memo } from 'react'
+import DatePicker, { registerLocale } from 'react-datepicker'
+import { ru } from 'date-fns/locale'
+import 'react-datepicker/dist/react-datepicker.css'
+registerLocale('ru', ru)
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -919,26 +923,21 @@ export function OrderEditor() {
 
           <div>
             <label className="text-sm font-semibold text-neutral-700 block mb-1.5">Дата отправки</label>
-            <input
-              type="text"
-              placeholder="ДД.ММ.ГГГГ"
-              maxLength={10}
-              value={completionForm.sent_at_display || ''}
-              onChange={(e) => {
-                let v = e.target.value.replace(/[^\d.]/g, '')
-                // auto-insert dots
-                if (v.length === 2 && !v.includes('.')) v = v + '.'
-                if (v.length === 5 && v.split('.').length === 2) v = v + '.'
-                setCompletionForm((f) => {
-                  // convert DD.MM.YYYY → YYYY-MM-DD for backend
-                  const parts = v.split('.')
-                  const iso = parts.length === 3 && parts[2].length === 4
-                    ? `${parts[2]}-${parts[1]}-${parts[0]}`
-                    : ''
-                  return { ...f, sent_at: iso, sent_at_display: v }
-                })
+            <DatePicker
+              locale="ru"
+              dateFormat="dd.MM.yyyy"
+              placeholderText="ДД.ММ.ГГГГ"
+              selected={completionForm.sent_at_date || null}
+              onChange={(date) => {
+                if (!date) { setCompletionForm(f => ({ ...f, sent_at: '', sent_at_date: null })); return }
+                const iso = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+                setCompletionForm(f => ({ ...f, sent_at: iso, sent_at_date: date }))
               }}
               className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 text-sm outline-none focus:border-primary"
+              wrapperClassName="w-full"
+              calendarClassName="!rounded-2xl !border !border-neutral-200 !shadow-xl !font-sans"
+              isClearable
+              showPopperArrow={false}
             />
           </div>
 
