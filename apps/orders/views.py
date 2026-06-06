@@ -154,7 +154,7 @@ class DownloadPDFView(APIView):
         order.pdf_file.save(filename, ContentFile(pdf_bytes), save=True)
 
         response = FileResponse(order.pdf_file.open('rb'), content_type='application/pdf')
-        response['Content-Disposition'] = f'inline; filename="{filename}"'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
 
 

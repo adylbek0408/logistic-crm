@@ -538,17 +538,32 @@ export function OrderEditor() {
     send({ event: 'order:status', status: newStatus })
   }
 
-  const handleDownloadPdf = () => {
-    const token = localStorage.getItem('access_token')
-    const url = `${window.location.origin}/api/orders/${orderId}/download-pdf/?token=${token}`
-    const a = document.createElement('a')
-    a.href = url
-    a.target = '_blank'
-    a.rel = 'noopener noreferrer'
-    a.download = `invoice_${orderId}_${new Date().toISOString().slice(0, 10)}.pdf`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  const handleDownloadPdf = async () => {
+    if (pdfLoading) return
+    setPdfLoading(true)
+    try {
+      const token = localStorage.getItem('access_token')
+      const url = `/api/orders/${orderId}/download-pdf/?token=${token}`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('PDF error')
+      const blob = await res.blob()
+      const blobUrl = URL.createObjectURL(blob)
+      const date = new Date().toISOString().slice(0, 10)
+      const filename = `invoice_${orderId}_${date}.pdf`
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000)
+    } catch {
+      alert('Не удалось скачать PDF')
+    } finally {
+      setPdfLoading(false)
+    }
   }
 
   const handleComplete = (e) => {
@@ -710,15 +725,15 @@ export function OrderEditor() {
               <CheckCircle2 size={16} />
             </button>
 
-            <button onClick={handleDownloadPdf}
-              className="hidden sm:inline-flex mobile-tap items-center justify-center gap-1 px-2.5 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all">
-              <FileDown size={12} />
+            <button onClick={handleDownloadPdf} disabled={pdfLoading}
+              className="hidden sm:inline-flex mobile-tap items-center justify-center gap-1 px-2.5 rounded-xl border border-neutral-200 text-xs font-medium text-neutral-600 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all disabled:opacity-50">
+              {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
               PDF
             </button>
-            <button onClick={handleDownloadPdf}
-              className="sm:hidden h-9 w-9 inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all shrink-0"
+            <button onClick={handleDownloadPdf} disabled={pdfLoading}
+              className="sm:hidden h-9 w-9 inline-flex items-center justify-center rounded-xl border border-neutral-200 text-neutral-500 hover:border-primary hover:text-primary hover:bg-primary/5 transition-all shrink-0 disabled:opacity-50"
               title="Скачать PDF">
-              <FileDown size={15} />
+              {pdfLoading ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
             </button>
 
             <button
